@@ -427,4 +427,132 @@ void main() {
 
     expect(await service.status(), <String, Object?>{'phase': 'idle'});
   });
+
+  test(
+    'interaction recording service shapes every payload it returns',
+    () async {
+      final requestBodies = <String, Map<String, Object?>>{};
+      final tokens = <String>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.json;
+        final token = request.headers.value('x-cockpit-token');
+        if (token != null) {
+          tokens.add(token);
+        }
+        switch ((request.method, request.uri.path)) {
+          case ('POST', '/recorder/start'):
+            requestBodies['start'] = Map<String, Object?>.from(
+              jsonDecode(await utf8.decoder.bind(request).join())
+                  as Map<Object?, Object?>,
+            );
+            request.response.write(
+              jsonEncode(
+                CockpitInteractionRecordingSession(
+                  sessionId: 'r1',
+                  phase: CockpitRecorderPhase.recording,
+                  startedAt: DateTime.utc(2026, 10, 7, 9),
+                  pausedAt: DateTime.utc(2026, 10, 7, 9, 1),
+                  stepCount: 2,
+                  unresolvedCount: 1,
+                ).toJson(),
+              ),
+            );
+          case ('GET', '/recorder/session'):
+            request.response.write(
+              jsonEncode(
+                CockpitInteractionRecordingSession(
+                  sessionId: 'r1',
+                  phase: CockpitRecorderPhase.recording,
+                  startedAt: DateTime.utc(2026, 10, 7, 9),
+                  pausedAt: DateTime.utc(2026, 10, 7, 9, 1),
+                  stepCount: 2,
+                  unresolvedCount: 1,
+                ).toJson(),
+              ),
+            );
+          case ('GET', '/recorder/steps'):
+            // A cursor at (or beyond) the total drains to an empty page that
+            // still reports the full count as the next cursor.
+            request.response.write(
+              jsonEncode(const <String, Object?>{
+                'steps': <Object?>[],
+                'total': 2,
+              }),
+            );
+          case ('GET', '/recorder/export'):
+            request.response.write(
+              jsonEncode(
+                CockpitRecordedFlowBundle(
+                  session: CockpitInteractionRecordingSession(
+                    sessionId: 'r1',
+                    phase: CockpitRecorderPhase.recording,
+                    startedAt: DateTime.utc(2026, 10, 7, 9),
+                    stepCount: 2,
+                  ),
+                  steps: const <CockpitInteractionStep>[],
+                  caseDocument: const <String, Object?>{
+                    'id': 'recorded-r1',
+                    'schemaVersion': 'cockpit.test/v2',
+                  },
+                  caseYaml: 'schemaVersion: cockpit.test/v2\nid: recorded-r1\n',
+                ).toJson(),
+              ),
+            );
+          default:
+            request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+
+      final service = CockpitInteractionRecordingService.forBaseUri(
+        Uri.parse('http://127.0.0.1:${server.port}'),
+        authToken: 'bridge-token-1',
+      );
+
+      // An unnamed start sends an empty request body; the wired bridge token
+      // travels as the x-cockpit-token header.
+      final started = await service.start();
+      expect(requestBodies['start'], <String, Object?>{});
+      expect(tokens, const <String>['bridge-token-1']);
+      expect(started.keys, const <String>{
+        'sessionId',
+        'phase',
+        'startedAt',
+        'pausedAt',
+        'stepCount',
+        'unresolvedCount',
+      });
+
+      // The active status mirrors the session payload; the idle status is the
+      // minimal phase-only payload.
+      expect((await service.status()).keys, started.keys);
+
+      // A drained cursor page reports an empty step list with the total.
+      expect(await service.steps(after: 2), const <String, Object?>{
+        'steps': <Object?>[],
+        'total': 2,
+      });
+
+      // The JSON export document is the complete flow bundle, not just the
+      // case document.
+      final bundle = await service.export();
+      final json = service.exportDocument(bundle, format: 'json');
+      expect(json['format'], 'json');
+      final document = json['document']! as Map<String, Object?>;
+      expect(document.keys, const <String>{
+        'session',
+        'steps',
+        'caseDocument',
+        'caseYaml',
+      });
+      expect(document, bundle.toJson());
+      expect(
+        (document['caseDocument']! as Map<String, Object?>)['id'],
+        'recorded-r1',
+      );
+    },
+  );
 }

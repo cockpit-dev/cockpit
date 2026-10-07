@@ -64,6 +64,26 @@ void main() {
     return (exitCode, Map<String, Object?>.from(decoded));
   }
 
+  Future<(int, Map<String, Object?>)> runRecordFailure(
+    List<String> arguments,
+  ) async {
+    stdout.clear();
+    stderr.clear();
+    final exitCode = await runner().run(<String>[
+      'record',
+      ...arguments,
+      '--endpoint',
+      app.endpoint.toString(),
+      '--format',
+      'json',
+      '--view',
+      'full',
+    ]);
+    final decoded = jsonDecode(stderr.toString().trim());
+    expect(decoded, isA<Map<Object?, Object?>>());
+    return (exitCode, decoded['error']! as Map<String, Object?>);
+  }
+
   test('record exposes the interaction recorder command surface', () {
     final record = runner().commands['record'];
 
@@ -192,6 +212,94 @@ void main() {
     },
   );
 
+  test('record leaves expose only their own options', () {
+    final record = runner().commands['record']!;
+    final leaves = record.subcommands;
+
+    expect(record.description, contains('Record in-app interactions'));
+    for (final leaf in leaves.values) {
+      expect(leaf.description, isNotEmpty, reason: leaf.name);
+      expect(
+        leaf.argParser.options.keys,
+        containsAll(const <String>['format', 'view', 'timeout']),
+        reason: leaf.name,
+      );
+    }
+    for (final name in const <String>[
+      'pause',
+      'resume',
+      'stop',
+      'status',
+      'steps',
+      'export',
+    ]) {
+      expect(
+        leaves[name]!.argParser.options,
+        isNot(contains('name')),
+        reason: name,
+      );
+    }
+    for (final name in const <String>[
+      'start',
+      'pause',
+      'resume',
+      'stop',
+      'status',
+    ]) {
+      expect(leaves[name]!.argParser.options, isNot(contains('out')));
+      expect(leaves[name]!.argParser.options, isNot(contains('output-format')));
+      expect(leaves[name]!.argParser.options, isNot(contains('after')));
+    }
+  });
+
+  test('record rejects an unknown output format before any request', () async {
+    stderr.clear();
+    final exitCode = await runner().run(<String>[
+      'record',
+      'export',
+      '--endpoint',
+      app.endpoint.toString(),
+      '--output-format',
+      'markdown',
+      '--format',
+      'json',
+    ]);
+
+    expect(exitCode, cockpitUsageExitCode);
+    expect(stderr.toString(), contains('output-format'));
+    expect(app.startBodies, isEmpty);
+  });
+
+  test('record steps surfaces the cursor-beyond-total 400 envelope', () async {
+    final (exitCode, failure) = await runRecordFailure(const <String>[
+      'steps',
+      '--after',
+      '${_RecorderAppServer.stepCount + 1}',
+    ]);
+
+    expect(exitCode, cockpitDataExitCode);
+    expect(failure['code'], 'invalidPayload');
+    expect(
+      failure['message'],
+      contains('must not exceed the recorded step count'),
+    );
+  });
+
+  test('record export overwrites an existing file', () async {
+    final stale = File(p.join(workingDirectory.path, 'flow.yaml'));
+    await stale.writeAsString('stale content that must disappear');
+
+    final (exitCode, receipt) = await runRecord(const <String>[
+      'export',
+      '--out',
+      'flow.yaml',
+    ]);
+
+    expect(exitCode, cockpitSuccessExitCode);
+    expect(receipt['path'], stale.path);
+    expect(stale.readAsStringSync(), '${_RecorderAppServer.caseYaml}\n');
+  });
+
   test('record export writes into a not-yet-existing directory', () async {
     final (exitCode, receipt) = await runRecord(const <String>[
       'export',
@@ -206,6 +314,118 @@ void main() {
     expect(receipt['path'], written.path);
     expect(written.existsSync(), isTrue);
     expect(written.readAsStringSync(), '${_RecorderAppServer.caseYaml}\n');
+  });
+
+  test('record pause from idle surfaces the server error envelope', () async {
+    app.idle = true;
+    final (exitCode, failure) = await runRecordFailure(const <String>['pause']);
+
+    expect(exitCode, cockpitDataExitCode);
+    expect(failure['code'], 'serverError');
+    expect(failure['message'], contains('Cannot pause'));
+    expect(failure['retry'], isFalse);
+  });
+
+  test('record status prints the idle payload as-is', () async {
+    app.idle = true;
+    final (exitCode, status) = await runRecord(const <String>['status']);
+
+    expect(exitCode, cockpitSuccessExitCode);
+    // The concise key renaming (sessionId -> runtime) has nothing to rename:
+    // the idle answer must reach stdout untouched.
+    expect(status, <String, Object?>{'phase': 'idle'});
+  });
+
+  test('record surfaces a slow endpoint as a retryable timeout', () async {
+    app.delay = const Duration(milliseconds: 600);
+    stdout.clear();
+    stderr.clear();
+    final exitCode = await runner().run(<String>[
+      'record',
+      'status',
+      '--endpoint',
+      app.endpoint.toString(),
+      '--timeout',
+      '50ms',
+      '--format',
+      'json',
+    ]);
+
+    expect(exitCode, cockpitTemporaryExitCode);
+    final error = jsonDecode(stderr.toString()) as Map<String, Object?>;
+    final failure = error['error']! as Map<String, Object?>;
+    expect(failure['retry'], isTrue);
+    expect(failure['code'], anyOf('timeout', 'remoteUnavailable'));
+  });
+
+  test(
+    'record runtime reports a failed session query through the operation envelope',
+    () async {
+      final fixtures = await _SessionFixtures.create(lifecycle: 'connecting');
+      addTearDown(fixtures.dispose);
+      final queries = <int>[];
+      final dev = CockpitDevRuntime(
+        fixtures.runtime,
+        operationInvoker: (_, kind, _) async {
+          expect(kind, 'session.development.get');
+          queries.add(queries.length);
+          // The reconciling query proves the session ready; the read query
+          // the recorder runtime issues afterwards fails.
+          return queries.length == 1
+              ? _operationResult(_readyOutput(app.endpoint))
+              : _failedOperationResult();
+        },
+      );
+      fixtures.runtime.configureOutput(
+        command: 'record.status',
+        selection: const CockpitCliOutputSelection(
+          format: CockpitCliFormat.json,
+          view: CockpitCliOutputView.full,
+        ),
+      );
+
+      final (service, exitCode) = await CockpitRecordRuntime(
+        fixtures.runtime,
+        dev,
+      ).resolve(action: 'record.status', session: null, endpoint: null);
+
+      expect(service, isNull);
+      expect(exitCode, cockpitDataExitCode);
+      expect(queries, hasLength(2));
+      // The failed operation surfaces through the standard operation
+      // envelope: its primary error and the diagnose follow-up.
+      final envelope =
+          jsonDecode(fixtures.stdout.toString()) as Map<String, Object?>;
+      expect(envelope['action'], 'record.status');
+      final errors = envelope['errors']! as List<Object?>;
+      final primary =
+          (errors.single as Map<String, Object?>)['primary']!
+              as Map<String, Object?>;
+      expect(primary['code'], 'developmentSessionUnavailable');
+      expect(envelope['next'], contains('cockpit dev diagnose'));
+    },
+  );
+
+  test('record runtime relays the session bridge token to the app', () async {
+    final fixtures = await _SessionFixtures.create(authenticationEnabled: true);
+    addTearDown(fixtures.dispose);
+    final dev = CockpitDevRuntime(
+      fixtures.runtime,
+      operationInvoker: (_, kind, _) async {
+        expect(kind, 'session.development.get');
+        return _operationResult(_readyOutput(app.endpoint));
+      },
+    );
+
+    final (service, exitCode) = await CockpitRecordRuntime(
+      fixtures.runtime,
+      dev,
+    ).resolve(action: 'record.start', session: null, endpoint: null);
+
+    expect(exitCode, cockpitSuccessExitCode);
+    await service!.start(name: 'auth flow');
+    expect(app.startBodies.single, <String, Object?>{'name': 'auth flow'});
+    expect(app.authTokens, const <String>['bridge-token-1']);
   });
 
   test('record reports an unreachable endpoint as retryable', () async {
@@ -372,6 +592,14 @@ final class _RecorderAppServer {
 
   final HttpServer _server;
   final List<Map<String, Object?>> startBodies = <Map<String, Object?>>[];
+  final List<String> authTokens = <String>[];
+
+  /// While true the app mirrors a cold app: no session yet and lifecycle
+  /// operations answer the server error the engine would raise.
+  bool idle = false;
+
+  /// Extra delay before answering, to exercise command timeouts.
+  Duration delay = Duration.zero;
 
   static String get caseYaml => _caseYaml;
 
@@ -387,6 +615,13 @@ final class _RecorderAppServer {
   Future<void> close() => _server.close(force: true);
 
   void _handle(HttpRequest request) async {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    final token = request.headers.value('x-cockpit-token');
+    if (token != null) {
+      authTokens.add(token);
+    }
     request.response.headers.contentType = ContentType.json;
     switch ((request.method, request.uri.path)) {
       case ('POST', '/recorder/start'):
@@ -396,6 +631,16 @@ final class _RecorderAppServer {
         );
         request.response.write(jsonEncode(_session('recording')));
       case ('POST', '/recorder/pause'):
+        if (idle) {
+          _writeError(request.response, HttpStatus.internalServerError, {
+            'error': 'serverError',
+            'message':
+                'Bad state: Cannot pause while the interaction recording is '
+                'idle.',
+          });
+          await request.response.close();
+          return;
+        }
         request.response.write(jsonEncode(_session('paused')));
       case ('POST', '/recorder/resume'):
         request.response.write(jsonEncode(_session('recording')));
@@ -407,9 +652,25 @@ final class _RecorderAppServer {
           }),
         );
       case ('GET', '/recorder/session'):
-        request.response.write(jsonEncode(_session('recording')));
+        request.response.write(
+          jsonEncode(
+            idle ? <String, Object?>{'phase': 'idle'} : _session('recording'),
+          ),
+        );
       case ('GET', '/recorder/steps'):
         final after = int.parse(request.uri.queryParameters['after'] ?? '0');
+        if (after > stepCount) {
+          // Mirrors the real app: a cursor beyond the recorded total is a
+          // client error, not an empty page.
+          _writeError(request.response, HttpStatus.badRequest, {
+            'error': 'invalidPayload',
+            'message':
+                'Query parameter "after" must not exceed the recorded step '
+                'count ($stepCount).',
+          });
+          await request.response.close();
+          return;
+        }
         request.response.write(
           jsonEncode(<String, Object?>{
             'steps': _steps.skip(after).toList(),
@@ -432,6 +693,15 @@ final class _RecorderAppServer {
         request.response.statusCode = HttpStatus.notFound;
     }
     await request.response.close();
+  }
+
+  static void _writeError(
+    HttpResponse response,
+    int statusCode,
+    Map<String, Object?> body,
+  ) {
+    response.statusCode = statusCode;
+    response.write(jsonEncode(body));
   }
 
   static Map<String, Object?> _session(String phase) => <String, Object?>{
@@ -481,7 +751,10 @@ final class _SessionFixtures {
   final StringBuffer stdout;
   final StringBuffer stderr;
 
-  static Future<_SessionFixtures> create() async {
+  static Future<_SessionFixtures> create({
+    String lifecycle = 'ready',
+    bool authenticationEnabled = false,
+  }) async {
     final directory = await Directory.systemTemp.createTemp(
       'cockpit-record-session-',
     );
@@ -518,6 +791,9 @@ final class _SessionFixtures {
       entrypoint: 'lib/main.dart',
       platform: 'macos',
       deviceId: 'macos',
+      lifecycle: lifecycle,
+      authenticationEnabled: authenticationEnabled,
+      authToken: authenticationEnabled ? 'bridge-token-1' : null,
     );
     return _SessionFixtures._(directory, runtime, stdout, stderr);
   }
@@ -543,6 +819,43 @@ CockpitOperationResult _operationResult(Map<String, Object?> output) {
     output: output,
   );
 }
+
+CockpitOperationResult _failedOperationResult() {
+  final now = DateTime.utc(2026, 10, 7);
+  return CockpitOperationResult(
+    operationId: 'operation-development-get',
+    kind: 'session.development.get',
+    workspaceId: 'workspace-1',
+    lifecycle: CockpitOperationLifecycle.completed,
+    outcome: CockpitOperationOutcome.failed,
+    submittedAt: now,
+    startedAt: now,
+    finishedAt: now,
+    failure: CockpitFailure(
+      primary: CockpitApiError(
+        code: 'developmentSessionUnavailable',
+        category: CockpitErrorCategory.environment,
+        message: 'The development session is gone.',
+        retryable: true,
+        responsibleLayer: CockpitResponsibleLayer.supervisor,
+      ),
+    ),
+  );
+}
+
+Map<String, Object?> _readyOutput(Uri bridgeUrl) => <String, Object?>{
+  'sessionId': 'session-1',
+  'targetId': 'target-1',
+  'appId': 'app-1',
+  'status': <String, Object?>{
+    'state': 'ready',
+    'appReachable': true,
+    'remoteSessionReachable': true,
+  },
+  'runtime': <String, Object?>{
+    'bridge': <String, Object?>{'baseUrl': bridgeUrl.toString()},
+  },
+};
 
 final class _NoopPermissionHardener implements CockpitPermissionHardener {
   const _NoopPermissionHardener();

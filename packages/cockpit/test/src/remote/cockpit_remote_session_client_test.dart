@@ -1675,4 +1675,208 @@ void main() {
       ),
     );
   });
+
+  test('remote session client rejects malformed recorder responses', () async {
+    Object? bodyFor(String path) => switch (path) {
+      '/recorder/session' => '', // 200 with an empty body.
+      '/recorder/steps' => jsonEncode(<Object?>[1, 2]), // 200, not an object.
+      _ => null,
+    };
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      final body = bodyFor(request.uri.path);
+      if (body != null) {
+        request.response.write(body);
+      }
+      await request.response.close();
+    });
+
+    final client = CockpitRemoteSessionClient(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+
+    await expectLater(
+      client.interactionRecordingSession,
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'Remote session returned an empty response.',
+        ),
+      ),
+    );
+    await expectLater(
+      client.interactionRecordingSteps,
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'Remote session response must be a JSON object.',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'remote session client keeps remote error details and raw bodies',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.internalServerError;
+        request.response.headers.contentType = ContentType.json;
+        if (request.uri.path == '/recorder/pause') {
+          request.response.write(
+            jsonEncode(const <String, Object?>{
+              'error': 'serverError',
+              'message': 'Cannot pause while idle.',
+              'details': <String, Object?>{'phase': 'idle'},
+            }),
+          );
+        } else {
+          // A non-envelope JSON body must not crash error decoding.
+          request.response.write(jsonEncode(<Object?>[1, 2]));
+        }
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      );
+
+      await expectLater(
+        client.pauseInteractionRecording,
+        throwsA(
+          isA<CockpitApplicationServiceException>()
+              .having((error) => error.code, 'code', 'serverError')
+              .having(
+                (error) => error.details,
+                'details',
+                containsPair('remoteDetails', <String, Object?>{
+                  'phase': 'idle',
+                }),
+              ),
+        ),
+      );
+      await expectLater(
+        client.resumeInteractionRecording,
+        throwsA(
+          isA<CockpitApplicationServiceException>()
+              .having((error) => error.code, 'code', 'remoteHttpError')
+              .having(
+                (error) => error.details,
+                'details',
+                containsPair('statusCode', 500),
+              )
+              .having(
+                (error) => error.details,
+                'details',
+                containsPair('body', '[1,2]'),
+              ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'remote session client rejects steps pages without their cursor contract',
+    () async {
+      String? servePath;
+      Object? body;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.json;
+        servePath = request.uri.path;
+        request.response.write(jsonEncode(body));
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      );
+
+      body = const <String, Object?>{'total': 2}; // steps list missing.
+      await expectLater(
+        client.interactionRecordingSteps,
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('missing its steps'),
+          ),
+        ),
+      );
+      body = const <String, Object?>{
+        'steps': <Object?>[],
+        'total': '2',
+      }; // total is not an integer.
+      await expectLater(
+        client.interactionRecordingSteps,
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('missing its total'),
+          ),
+        ),
+      );
+      expect(servePath, '/recorder/steps');
+    },
+  );
+
+  test(
+    'remote session client round-trips a large recorded case export',
+    () async {
+      // Regression for the recorder export bound: a real recording's case
+      // YAML is far beyond the default 4096-character text limit; the client
+      // must decode bundles up to the 1 MiB protocol ceiling.
+      final largeYaml = StringBuffer('schemaVersion: cockpit.test/v2\n')
+        ..write('id: recorded-large\n')
+        ..writeAll(
+          List<String>.generate(
+            3500,
+            (index) => 'note$index: a recorded step note value $index\n',
+          ),
+        );
+      expect(largeYaml.length, greaterThan(64 * 1024));
+      final session = CockpitInteractionRecordingSession(
+        sessionId: 'r-large',
+        phase: CockpitRecorderPhase.recording,
+        startedAt: DateTime.utc(2026, 10, 7, 9),
+        stepCount: 0,
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(
+            CockpitRecordedFlowBundle(
+              session: session,
+              steps: const <CockpitInteractionStep>[],
+              caseDocument: const <String, Object?>{
+                'id': 'recorded-large',
+                'schemaVersion': 'cockpit.test/v2',
+              },
+              caseYaml: largeYaml.toString(),
+            ).toJson(),
+          ),
+        );
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      );
+
+      final bundle = await client.exportInteractionRecording();
+      expect(bundle.caseYaml, largeYaml.toString());
+      expect(bundle.caseYaml.length, greaterThan(64 * 1024));
+      expect(bundle.session, session);
+      expect(bundle.caseDocument['id'], 'recorded-large');
+    },
+  );
 }

@@ -16,6 +16,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 /// Wire-level coverage for the recorder MCP tools: a real
 /// [CockpitSupervisorApiClient] negotiates with an in-process supervisor stub
@@ -92,21 +93,77 @@ void main() {
       expect(after['minimum'], 0);
       expect(properties('recorder_export').keys, isNot(contains('out')));
 
-      final schema = CockpitMcpToolAdapter.protocolToolFor(
-        tools['recorder_status']!,
-      ).inputSchema;
-      expect(
-        schema.validate(const <String, Object?>{
+      // Every tool enforces strict string identity arguments and only its own
+      // optional inputs; the wire schemas reject wrong types and bounds.
+      for (final tool in tools.values) {
+        final schema = CockpitMcpToolAdapter.protocolToolFor(tool).inputSchema;
+        const arguments = <String, Object?>{
           'workspaceId': 'workspace-1',
           'sessionId': 'session-1',
+        };
+        expect(
+          schema.validate(arguments),
+          isEmpty,
+          reason: '${tool.name}: bare call must be schema-valid',
+        );
+        expect(
+          schema.validate(const <String, Object?>{'sessionId': 'session-1'}),
+          isNotEmpty,
+          reason: '${tool.name}: missing workspaceId',
+        );
+        expect(
+          schema.validate(const <String, Object?>{'workspaceId': 7}),
+          isNotEmpty,
+          reason: '${tool.name}: workspaceId must be a string',
+        );
+        expect(
+          schema.validate(const <String, Object?>{
+            'workspaceId': 'workspace-1',
+            'sessionId': 'session-1',
+            'unexpected': true,
+          }),
+          isNotEmpty,
+          reason: '${tool.name}: unknown arguments are rejected',
+        );
+      }
+      final stepsSchema = CockpitMcpToolAdapter.protocolToolFor(
+        tools['recorder_steps']!,
+      ).inputSchema;
+      expect(
+        stepsSchema.validate(const <String, Object?>{
+          'workspaceId': 'workspace-1',
+          'sessionId': 'session-1',
+          'after': 3,
+        }),
+        isEmpty,
+      );
+      for (final invalid in const <Object?>['1', -1, 1000001, 1.5, true]) {
+        expect(
+          stepsSchema.validate(<String, Object?>{
+            'workspaceId': 'workspace-1',
+            'sessionId': 'session-1',
+            'after': invalid,
+          }),
+          isNotEmpty,
+          reason: 'after=$invalid must fail schema validation',
+        );
+      }
+      final startSchema = CockpitMcpToolAdapter.protocolToolFor(
+        tools['recorder_start']!,
+      ).inputSchema;
+      expect(
+        startSchema.validate(const <String, Object?>{
+          'workspaceId': 'workspace-1',
+          'sessionId': 'session-1',
+          'name': 'checkout',
         }),
         isEmpty,
       );
       expect(
-        schema.validate(const <String, Object?>{
+        startSchema.validate(const <String, Object?>{
           'workspaceId': 'workspace-1',
           'sessionId': 'session-1',
-          'out': '/tmp/flow.yaml',
+          'name': 9,
         }),
         isNotEmpty,
       );
@@ -143,6 +200,12 @@ void main() {
     expect(status['sessionId'], 'r1');
     expect(status['stepCount'], _RecorderAppServer.stepCount);
 
+    final paused = await call('recorder_pause');
+    expect(paused['phase'], 'paused');
+    expect(paused['pausedAt'], '2026-10-07T09:01:00.000Z');
+    final resumed = await call('recorder_resume');
+    expect(resumed['phase'], 'recording');
+
     final page = await call('recorder_steps', {'after': 1});
     expect(page['total'], _RecorderAppServer.stepCount);
     expect(
@@ -151,15 +214,49 @@ void main() {
       ),
       const <String>['s2'],
     );
+    expect(harness.app.stepsQueries, const <String>['1']);
 
     final exported = await call('recorder_export');
     expect(exported['format'], 'yaml');
     expect(exported['document'], _RecorderAppServer.caseYaml);
+    final parsed = loadYaml(exported['document']! as String) as YamlMap;
+    expect(parsed['schemaVersion'], 'cockpit.test/v2');
+    expect(parsed['id'], 'recorded-r1');
 
     final stopped = await call('recorder_stop');
     expect((stopped['session']! as Map<String, Object?>)['phase'], 'stopped');
     expect(stopped['steps'], hasLength(_RecorderAppServer.stepCount));
     expect(harness.supervisor.developmentQueries, isNotEmpty);
+  });
+
+  test('recorder tools answer the idle session and default cursor', () async {
+    final harness = await _Harness.create();
+    addTearDown(harness.dispose);
+    final tools = <String, CockpitMcpTool>{
+      for (final tool in cockpitMcpDevelopmentTools(() async => harness.client))
+        tool.name: tool,
+    };
+    Future<Map<String, Object?>> call(String name) => tools[name]!
+        .call(const <String, Object?>{
+          'workspaceId': 'workspace-1',
+          'sessionId': 'session-1',
+        })
+        .then((result) => result['structuredContent']! as Map<String, Object?>);
+
+    harness.app.idle = true;
+    expect(await call('recorder_status'), const <String, Object?>{
+      'phase': 'idle',
+    });
+
+    // Without an explicit cursor the tool drains from zero.
+    harness.app.idle = false;
+    final page = await call('recorder_steps');
+    expect(page['total'], _RecorderAppServer.stepCount);
+    expect(
+      (page['steps']! as List<Object?>),
+      hasLength(_RecorderAppServer.stepCount),
+    );
+    expect(harness.app.stepsQueries, const <String>['0']);
   });
 
   test('recorder tools map resolution failures to MCP errors', () async {
@@ -188,7 +285,24 @@ void main() {
       ),
     );
 
+    // A query that never finished (still running, no outcome, no failure
+    // payload) keeps the same error class with the bare message.
+    harness.supervisor.pendingDevelopmentGet = true;
     harness.supervisor.failDevelopmentGet = false;
+    await expectLater(
+      tools['recorder_pause']!.call(arguments),
+      throwsA(
+        isA<CockpitMcpError>()
+            .having((error) => error.code, 'code', -32000)
+            .having(
+              (error) => error.message,
+              'message',
+              'Development session session-1 could not be queried.',
+            ),
+      ),
+    );
+    harness.supervisor.pendingDevelopmentGet = false;
+
     harness.supervisor.bridgeReady = false;
     await expectLater(
       tools['recorder_status']!.call(arguments),
@@ -199,6 +313,57 @@ void main() {
               (error) => error.data,
               'data',
               containsPair('apiCode', 'developmentSessionBridgeUnavailable'),
+            ),
+      ),
+    );
+
+    // App-side failures keep their envelope code through the MCP boundary.
+    harness.supervisor.bridgeReady = true;
+    harness.app.failPause = true;
+    await expectLater(
+      tools['recorder_pause']!.call(arguments),
+      throwsA(
+        isA<CockpitMcpError>()
+            .having((error) => error.code, 'code', -32000)
+            .having(
+              (error) => error.data,
+              'data',
+              containsPair('apiCode', 'serverError'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('Cannot pause'),
+            ),
+      ),
+    );
+
+    // Wrong-typed and unknown tool arguments are invalid-argument errors.
+    await expectLater(
+      tools['recorder_steps']!.call(<String, Object?>{
+        'workspaceId': 'workspace-1',
+        'sessionId': 'session-1',
+        'after': '1',
+      }),
+      throwsA(
+        isA<CockpitMcpError>()
+            .having((error) => error.code, 'code', -32602)
+            .having((error) => error.message, 'message', contains('after')),
+      ),
+    );
+    await expectLater(
+      tools['recorder_start']!.call(<String, Object?>{
+        'workspaceId': 'workspace-1',
+        'sessionId': 'session-1',
+        'out': 'flow.yaml',
+      }),
+      throwsA(
+        isA<CockpitMcpError>()
+            .having((error) => error.code, 'code', -32602)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('Unknown tool argument out'),
             ),
       ),
     );
@@ -298,6 +463,10 @@ final class _SupervisorStub {
   /// Whether `session.development.get` answers a ready bridge.
   bool bridgeReady = true;
   bool failDevelopmentGet = false;
+
+  /// Answers with a still-running operation (no outcome, no failure),
+  /// exercising the bare resolution-failure message.
+  bool pendingDevelopmentGet = false;
   final List<Map<String, Object?>> developmentQueries =
       <Map<String, Object?>>[];
 
@@ -374,6 +543,16 @@ final class _SupervisorStub {
         : const <String, Object?>{};
     developmentQueries.add(wireInput);
     final now = DateTime.now().toUtc();
+    if (pendingDevelopmentGet) {
+      return CockpitOperationResult(
+        operationId: 'operation-development-get',
+        kind: 'session.development.get',
+        lifecycle: CockpitOperationLifecycle.running,
+        submittedAt: now,
+        startedAt: now,
+        workspaceId: 'workspace-1',
+      );
+    }
     if (failDevelopmentGet) {
       return CockpitOperationResult(
         operationId: 'operation-development-get',
@@ -430,6 +609,12 @@ final class _RecorderAppServer {
 
   final HttpServer _server;
   final List<Map<String, Object?>> startBodies = <Map<String, Object?>>[];
+  final List<String> stepsQueries = <String>[];
+
+  /// While true the app answers the cold-app payloads: idle session and the
+  /// server error a pause from idle raises.
+  bool idle = false;
+  bool failPause = false;
 
   static String get caseYaml => _caseYaml;
 
@@ -454,7 +639,24 @@ final class _RecorderAppServer {
         );
         request.response.write(jsonEncode(_session('recording')));
       case ('POST', '/recorder/pause'):
-        request.response.write(jsonEncode(_session('paused')));
+        if (failPause || idle) {
+          request.response.statusCode = HttpStatus.internalServerError;
+          request.response.write(
+            jsonEncode(const <String, Object?>{
+              'error': 'serverError',
+              'message':
+                  'Bad state: Cannot pause while the interaction recording '
+                  'is idle.',
+            }),
+          );
+        } else {
+          request.response.write(
+            jsonEncode({
+              ..._session('paused'),
+              'pausedAt': '2026-10-07T09:01:00.000Z',
+            }),
+          );
+        }
       case ('POST', '/recorder/resume'):
         request.response.write(jsonEncode(_session('recording')));
       case ('POST', '/recorder/stop'):
@@ -465,12 +667,17 @@ final class _RecorderAppServer {
           }),
         );
       case ('GET', '/recorder/session'):
-        request.response.write(jsonEncode(_session('recording')));
+        request.response.write(
+          jsonEncode(
+            idle ? <String, Object?>{'phase': 'idle'} : _session('recording'),
+          ),
+        );
       case ('GET', '/recorder/steps'):
-        final after = int.parse(request.uri.queryParameters['after'] ?? '0');
+        final after = request.uri.queryParameters['after'] ?? '0';
+        stepsQueries.add(after);
         request.response.write(
           jsonEncode(<String, Object?>{
-            'steps': _steps.skip(after).toList(),
+            'steps': _steps.skip(int.parse(after)).toList(),
             'total': stepCount,
           }),
         );
