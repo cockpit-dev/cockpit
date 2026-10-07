@@ -12,6 +12,7 @@ import 'cockpit_interaction_policy.dart';
 import 'cockpit_runtime_observer.dart';
 import 'cockpit_runtime_observer_configuration.dart';
 import 'cockpit_target_registry.dart';
+import 'flutter_cockpit_recorder_config.dart';
 import '../performance/cockpit_performance_collector.dart';
 import '../performance/cockpit_performance_plugin.dart';
 
@@ -35,6 +36,7 @@ final class FlutterCockpitConfig {
     this.interactionPolicy = const CockpitInteractionPolicy(),
     this.discoveryPolicy = const CockpitDiscoveryPolicy(),
     this.diagnostics = const CockpitDiagnosticsConfig(),
+    this.recorder = const FlutterCockpitRecorderConfig(),
   });
 
   const FlutterCockpitConfig.production({
@@ -56,6 +58,7 @@ final class FlutterCockpitConfig {
     this.interactionPolicy = const CockpitInteractionPolicy(),
     this.discoveryPolicy = const CockpitDiscoveryPolicy(),
     this.diagnostics = const CockpitDiagnosticsConfig(),
+    this.recorder = const FlutterCockpitRecorderConfig(),
   });
 
   factory FlutterCockpitConfig.fromRuntimeConfiguration(
@@ -79,6 +82,7 @@ final class FlutterCockpitConfig {
       interactionPolicy: configuration.interactionPolicy,
       discoveryPolicy: configuration.discoveryPolicy,
       diagnostics: configuration.diagnostics,
+      recorder: configuration.recorder,
     );
   }
 
@@ -99,6 +103,7 @@ final class FlutterCockpitConfig {
   final CockpitInteractionPolicy interactionPolicy;
   final CockpitDiscoveryPolicy discoveryPolicy;
   final CockpitDiagnosticsConfig diagnostics;
+  final FlutterCockpitRecorderConfig recorder;
 
   FlutterCockpitConfiguration toRuntimeConfiguration() {
     return FlutterCockpitConfiguration(
@@ -119,6 +124,7 @@ final class FlutterCockpitConfig {
       interactionPolicy: interactionPolicy,
       discoveryPolicy: discoveryPolicy,
       diagnostics: diagnostics,
+      recorder: recorder,
     );
   }
 
@@ -140,6 +146,7 @@ final class FlutterCockpitConfig {
     CockpitInteractionPolicy? interactionPolicy,
     CockpitDiscoveryPolicy? discoveryPolicy,
     CockpitDiagnosticsConfig? diagnostics,
+    FlutterCockpitRecorderConfig? recorder,
   }) {
     return FlutterCockpitConfig(
       initialRouteName: initialRouteName ?? this.initialRouteName,
@@ -162,6 +169,7 @@ final class FlutterCockpitConfig {
       interactionPolicy: interactionPolicy ?? this.interactionPolicy,
       discoveryPolicy: discoveryPolicy ?? this.discoveryPolicy,
       diagnostics: diagnostics ?? this.diagnostics,
+      recorder: recorder ?? this.recorder,
     );
   }
 
@@ -186,7 +194,8 @@ final class FlutterCockpitConfig {
                 runtimeObserverConfiguration &&
             other.interactionPolicy == interactionPolicy &&
             other.discoveryPolicy == discoveryPolicy &&
-            other.diagnostics == diagnostics;
+            other.diagnostics == diagnostics &&
+            other.recorder == recorder;
   }
 
   @override
@@ -208,6 +217,7 @@ final class FlutterCockpitConfig {
     interactionPolicy,
     discoveryPolicy,
     diagnostics,
+    recorder,
   );
 }
 

@@ -15,6 +15,7 @@ import 'cockpit_flutter_runtime_observer.dart';
 import 'flutter_cockpit_binding.dart';
 import 'flutter_cockpit_config.dart';
 import 'flutter_cockpit_configuration.dart';
+import 'flutter_cockpit_recorder_config.dart';
 import 'flutter_cockpit_root.dart';
 import '../performance/cockpit_performance_collector.dart';
 import '../performance/cockpit_performance_plugin.dart';
@@ -26,6 +27,10 @@ abstract final class FlutterCockpit {
     FlutterCockpitConfiguration configuration =
         const FlutterCockpitConfiguration(),
   ]) {
+    assertFlutterCockpitRecorderBuildMode(
+      config: configuration.recorder,
+      releaseMode: foundation.kReleaseMode,
+    );
     final existing = _binding;
     if (existing != null) {
       existing.updateConfiguration(configuration);

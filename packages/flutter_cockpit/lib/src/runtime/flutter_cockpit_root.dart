@@ -30,6 +30,8 @@ import '../recording/cockpit_recording_layer.dart';
 import '../recording/cockpit_recording_request.dart';
 import '../recording/cockpit_recording_result.dart';
 import '../recording/cockpit_recording_session.dart';
+import '../recorder/cockpit_interaction_capture.dart';
+import '../recorder/cockpit_interaction_recorder.dart';
 import 'flutter_cockpit.dart';
 import 'cockpit_derived_app_state.dart';
 import 'cockpit_tap_feedback_overlay.dart';
@@ -107,6 +109,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   CockpitRemoteSessionBridgeClient? _remoteSessionBridgeClient;
   Future<void>? _remoteSessionStartFuture;
   CockpitTapFeedbackController? _tapFeedbackController;
+  CockpitInteractionRecorder? _interactionRecorder;
   final Map<RouteInformationProvider, VoidCallback> _routeInformationUnbinders =
       <RouteInformationProvider, VoidCallback>{};
   bool _routeInformationDiscoveryScheduled = false;
@@ -125,6 +128,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     super.initState();
     _scheduleRouteInformationDiscovery(restart: true);
     _syncTapFeedbackController();
+    _syncInteractionRecorder();
     final configuration = FlutterCockpit.binding.configuration.remoteSession;
     if (configuration != null &&
         configuration.enabled &&
@@ -137,6 +141,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   void didUpdateWidget(covariant FlutterCockpitRoot oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncTapFeedbackController();
+    _syncInteractionRecorder();
     _scheduleRouteInformationDiscovery(restart: true);
   }
 
@@ -557,8 +562,16 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     unawaited(_nativeSemantics.disable().catchError((_) {}));
     _semanticsHandle?.dispose();
     _tapFeedbackController?.dispose();
+    _interactionRecorder?.dispose();
+    _interactionRecorder = null;
     super.dispose();
   }
+
+  /// The interaction recorder owned by this root, or `null` when the
+  /// recorder is disabled in configuration. Exposed as the mounting seam for
+  /// the recorder HUD host, which a later phase adds beside the capture
+  /// subtree.
+  CockpitInteractionRecorder? get interactionRecorder => _interactionRecorder;
 
   @override
   Widget build(BuildContext context) {
@@ -576,24 +589,57 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
           tapFeedbackController: _tapFeedbackController,
           child: child ?? const SizedBox.shrink(),
         );
+        // The capture layer wraps the surface so its translucent Listener is
+        // an ancestor of every app hit; the recorder HUD host mounts as a
+        // later Stack sibling above both, keeping its taps out of the
+        // recorded stream and out of the surface repaint boundary.
+        final interactionRecorder = _interactionRecorder;
+        final observedSurface = interactionRecorder == null
+            ? surface
+            : CockpitInteractionCapture(
+                recorder: interactionRecorder,
+                registry: binding.registry,
+                routeName: routeName,
+                defaults: binding.configuration.recorder.defaults,
+                child: surface,
+              );
         final tapFeedbackController = _tapFeedbackController;
-        if (tapFeedbackController == null) {
-          return surface;
+        if (tapFeedbackController == null && interactionRecorder == null) {
+          return observedSurface;
         }
         return Stack(
+          // Non-directional alignment: the root sits above the app's
+          // MaterialApp, so no Directionality ancestor exists here, and all
+          // children fill the stack anyway.
+          alignment: Alignment.topLeft,
           fit: StackFit.expand,
           children: <Widget>[
-            surface,
-            Positioned.fill(
-              child: CockpitTapFeedbackOverlay(
-                controller: tapFeedbackController,
+            observedSurface,
+            if (tapFeedbackController != null)
+              Positioned.fill(
+                child: CockpitTapFeedbackOverlay(
+                  controller: tapFeedbackController,
+                ),
               ),
-            ),
           ],
         );
       },
       child: widget.child,
     );
+  }
+
+  void _syncInteractionRecorder() {
+    // The build-mode guard at initialization already rejects an enabled
+    // recorder in release builds; the mode check here keeps release disabled
+    // even for configurations injected after initialization.
+    final shouldEnable =
+        FlutterCockpit.binding.configuration.recorder.enabled && !kReleaseMode;
+    if (shouldEnable) {
+      _interactionRecorder ??= CockpitInteractionRecorder();
+      return;
+    }
+    _interactionRecorder?.dispose();
+    _interactionRecorder = null;
   }
 
   void _syncTapFeedbackController() {
