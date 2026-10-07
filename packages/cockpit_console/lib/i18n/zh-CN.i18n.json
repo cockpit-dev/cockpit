@@ -28,6 +28,7 @@
     "projects": "项目",
     "apps_devices": "应用与设备",
     "live_sessions": "实时会话",
+    "recorder": "录制",
     "tests": "测试",
     "test_runs": "测试运行",
     "actions": "操作",
@@ -855,6 +856,58 @@
       "empty": "尚未捕获到网络请求。操作应用后刷新此分区。",
       "unknown_uri": "未知地址",
       "unknown_source": "未知"
+    }
+  },
+  "recorder": {
+    "title": "交互录制",
+    "subtitle": "将实时应用交互录制为可回放的测试用例",
+    "no_sessions_title": "没有实时会话",
+    "no_sessions_description": "先用 Cockpit 启动应用，然后在这里录制应用交互。",
+    "endpoint_label": "端点",
+    "endpoint_not_connected": "未连接",
+    "connect": "连接",
+    "recheck": "重新检测",
+    "connecting": "正在连接…",
+    "name_label": "名称（可选）",
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "恢复",
+    "stop": "停止",
+    "status_line": "{{phase}} · {{steps}} · {{unresolved}}",
+    "step_count": {
+      "other": "{{n}} 步"
+    },
+    "unresolved_count": {
+      "other": "{{n}} 个未解析"
+    },
+    "timeline_title": "时间线",
+    "timeline_empty": "操作应用时，录制的交互会显示在这里。",
+    "unresolved_step": "（未解析）",
+    "settled_after": "已稳定 · {{ms}} 毫秒",
+    "export_title": "导出预览",
+    "export": "导出",
+    "export_hint": "开始录制后即可导出用例 YAML。",
+    "copy_yaml": "复制 YAML",
+    "yaml_copied": "已复制 YAML",
+    "save": "保存",
+    "save_document": "保存用例文档",
+    "document_saved": "已保存到 {{path}}",
+    "save_failed": "保存失败：{{error}}",
+    "phase": {
+      "idle": "空闲",
+      "recording": "录制中",
+      "paused": "已暂停",
+      "stopped": "已停止"
+    },
+    "kind": {
+      "tap": "点按",
+      "long_press": "长按",
+      "text": "输入文本",
+      "scroll": "滚动",
+      "route_change": "路由切换",
+      "back": "返回",
+      "marker": "标记",
+      "note": "备注"
     }
   }
 }

@@ -39,6 +39,7 @@ export 'src/application/cockpit_collect_remote_snapshot_service.dart';
 export 'src/application/cockpit_compare_development_probe_service.dart';
 export 'src/application/cockpit_grep_package_uris_service.dart';
 export 'src/application/cockpit_hot_reload_service.dart';
+export 'src/application/cockpit_interaction_recording_service.dart';
 export 'src/application/cockpit_hot_restart_service.dart';
 export 'src/application/cockpit_inspect_ui_service.dart';
 export 'src/application/cockpit_inspect_surface_service.dart';

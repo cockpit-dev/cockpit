@@ -35,7 +35,7 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 
 	late final TranslationsZhCn _root = this; // ignore: unused_field
 
-	@override
+	@override 
 	TranslationsZhCn $copyWith({TranslationMetadata<AppLocale, Translations>? meta}) => TranslationsZhCn(meta: meta ?? this.$meta);
 
 	// Translations
@@ -53,6 +53,7 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 	@override late final _Translations$actions$zh_CN actions = _Translations$actions$zh_CN._(_root);
 	@override late final _Translations$ai$zh_CN ai = _Translations$ai$zh_CN._(_root);
 	@override late final _Translations$sessions$zh_CN sessions = _Translations$sessions$zh_CN._(_root);
+	@override late final _Translations$recorder$zh_CN recorder = _Translations$recorder$zh_CN._(_root);
 }
 
 // Path: app
@@ -111,6 +112,7 @@ class _Translations$nav$zh_CN extends Translations$nav$en {
 	@override String get projects => '项目';
 	@override String get appsDevices => '应用与设备';
 	@override String get liveSessions => '实时会话';
+	@override String get recorder => '录制';
 	@override String get tests => '测试';
 	@override String get testRuns => '测试运行';
 	@override String get actions => '操作';
@@ -608,6 +610,51 @@ class _Translations$sessions$zh_CN extends Translations$sessions$en {
 	@override late final _Translations$sessions$timeline$zh_CN timeline = _Translations$sessions$timeline$zh_CN._(_root);
 	@override late final _Translations$sessions$diagnostics$zh_CN diagnostics = _Translations$sessions$diagnostics$zh_CN._(_root);
 	@override late final _Translations$sessions$network$zh_CN network = _Translations$sessions$network$zh_CN._(_root);
+}
+
+// Path: recorder
+class _Translations$recorder$zh_CN extends Translations$recorder$en {
+	_Translations$recorder$zh_CN._(TranslationsZhCn root) : this._root = root, super.internal(root);
+
+	final TranslationsZhCn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => '交互录制';
+	@override String get subtitle => '将实时应用交互录制为可回放的测试用例';
+	@override String get noSessionsTitle => '没有实时会话';
+	@override String get noSessionsDescription => '先用 Cockpit 启动应用，然后在这里录制应用交互。';
+	@override String get endpointLabel => '端点';
+	@override String get endpointNotConnected => '未连接';
+	@override String get connect => '连接';
+	@override String get recheck => '重新检测';
+	@override String get connecting => '正在连接…';
+	@override String get nameLabel => '名称（可选）';
+	@override String get start => '开始';
+	@override String get pause => '暂停';
+	@override String get resume => '恢复';
+	@override String get stop => '停止';
+	@override String statusLine({required Object phase, required Object steps, required Object unresolved}) => '${phase} · ${steps} · ${unresolved}';
+	@override String stepCount({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n,
+		other: '${n} 步',
+	);
+	@override String unresolvedCount({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n,
+		other: '${n} 个未解析',
+	);
+	@override String get timelineTitle => '时间线';
+	@override String get timelineEmpty => '操作应用时，录制的交互会显示在这里。';
+	@override String get unresolvedStep => '（未解析）';
+	@override String settledAfter({required Object ms}) => '已稳定 · ${ms} 毫秒';
+	@override String get exportTitle => '导出预览';
+	@override String get export => '导出';
+	@override String get exportHint => '开始录制后即可导出用例 YAML。';
+	@override String get copyYaml => '复制 YAML';
+	@override String get yamlCopied => '已复制 YAML';
+	@override String get save => '保存';
+	@override String get saveDocument => '保存用例文档';
+	@override String documentSaved({required Object path}) => '已保存到 ${path}';
+	@override String saveFailed({required Object error}) => '保存失败：${error}';
+	@override late final _Translations$recorder$phase$zh_CN phase = _Translations$recorder$phase$zh_CN._(_root);
+	@override late final _Translations$recorder$kind$zh_CN kind = _Translations$recorder$kind$zh_CN._(_root);
 }
 
 // Path: targets.kind
@@ -1194,6 +1241,36 @@ class _Translations$sessions$network$zh_CN extends Translations$sessions$network
 	@override String get unknownSource => '未知';
 }
 
+// Path: recorder.phase
+class _Translations$recorder$phase$zh_CN extends Translations$recorder$phase$en {
+	_Translations$recorder$phase$zh_CN._(TranslationsZhCn root) : this._root = root, super.internal(root);
+
+	final TranslationsZhCn _root; // ignore: unused_field
+
+	// Translations
+	@override String get idle => '空闲';
+	@override String get recording => '录制中';
+	@override String get paused => '已暂停';
+	@override String get stopped => '已停止';
+}
+
+// Path: recorder.kind
+class _Translations$recorder$kind$zh_CN extends Translations$recorder$kind$en {
+	_Translations$recorder$kind$zh_CN._(TranslationsZhCn root) : this._root = root, super.internal(root);
+
+	final TranslationsZhCn _root; // ignore: unused_field
+
+	// Translations
+	@override String get tap => '点按';
+	@override String get longPress => '长按';
+	@override String get text => '输入文本';
+	@override String get scroll => '滚动';
+	@override String get routeChange => '路由切换';
+	@override String get back => '返回';
+	@override String get marker => '标记';
+	@override String get note => '备注';
+}
+
 // Path: ai.tool.status
 class _Translations$ai$tool$status$zh_CN extends Translations$ai$tool$status$en {
 	_Translations$ai$tool$status$zh_CN._(TranslationsZhCn root) : this._root = root, super.internal(root);
@@ -1249,6 +1326,7 @@ extension on TranslationsZhCn {
 			'nav.projects' => '项目',
 			'nav.appsDevices' => '应用与设备',
 			'nav.liveSessions' => '实时会话',
+			'nav.recorder' => '录制',
 			'nav.tests' => '测试',
 			'nav.testRuns' => '测试运行',
 			'nav.actions' => '操作',
@@ -1426,7 +1504,7 @@ extension on TranslationsZhCn {
 			'tests.emptyTitle' => '尚无测试文件',
 			'tests.emptyDescription' => '创建并保存测试，然后在运行前完成检查。',
 			'tests.suite' => '测试套件',
-			'tests.suiteCases' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '测试套件 · ${n} 个用例', other: '测试套件 · ${n} 个用例', ),
+			'tests.suiteCases' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '测试套件 · ${n} 个用例', other: '测试套件 · ${n} 个用例', ), 
 			'tests.testCase' => '测试用例',
 			'tests.filePath' => '测试文件路径',
 			'tests.filePathHint' => '相对于项目，例如 cockpit/e2e/case.yaml',
@@ -1510,7 +1588,7 @@ extension on TranslationsZhCn {
 			'runs.timeoutHint' => '使用默认值，例如 30s 或 5m',
 			'runs.recentUnavailable' => '最近运行暂时不可用',
 			'runs.loadingRun' => '正在加载运行',
-			'runs.events' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个事件', other: '${n} 个事件', ),
+			'runs.events' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个事件', other: '${n} 个事件', ), 
 			'runs.newRun' => '新建运行',
 			'runs.cancelRun' => '取消运行',
 			'runs.recentRuns' => '最近运行',
@@ -1676,7 +1754,7 @@ extension on TranslationsZhCn {
 			'ai.connection.selectSessionDirectory' => '选择会话工作目录',
 			'ai.connection.sessionContext' => '会话上下文',
 			'ai.connection.optionalContext' => '可选目录和 MCP 服务器',
-			'ai.connection.configuredItems' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已配置 ${n} 项', other: '已配置 ${n} 项', ),
+			'ai.connection.configuredItems' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已配置 ${n} 项', other: '已配置 ${n} 项', ), 
 			'ai.connection.additionalDirectories' => '附加目录',
 			'ai.connection.additionalDirectoriesDescription' => '允许 Agent 访问工作目录之外的其他工作区根目录。',
 			'ai.connection.addDirectory' => '添加目录',
@@ -1727,7 +1805,7 @@ extension on TranslationsZhCn {
 			'ai.session.noneSaved' => '此 Agent 没有返回已保存的会话。',
 			'ai.session.loadMore' => '加载更多',
 			'ai.session.activeSession' => '当前会话',
-			'ai.session.additionalDirectories' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个附加目录', other: '${n} 个附加目录', ),
+			'ai.session.additionalDirectories' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个附加目录', other: '${n} 个附加目录', ), 
 			'ai.session.mcpServers' => ({required Object names}) => 'MCP：${names}',
 			'ai.session.active' => '当前',
 			'ai.session.actions' => '会话操作',
@@ -1738,12 +1816,12 @@ extension on TranslationsZhCn {
 			'ai.session.settings' => 'Agent 设置',
 			'ai.session.mode' => '模式',
 			'ai.session.noSettings' => '此 Agent 没有提供会话设置。',
-			'ai.session.currentContext' => '当前上下文',
 			_ => null,
 		} ?? switch (path) {
+			'ai.session.currentContext' => '当前上下文',
 			'ai.session.usage' => '用量',
-			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已使用 ${n} 个 Token', other: '已使用 ${n} 个 Token', ),
-			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '上下文容量 ${n} 个 Token', other: '上下文容量 ${n} 个 Token', ),
+			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已使用 ${n} 个 Token', other: '已使用 ${n} 个 Token', ), 
+			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '上下文容量 ${n} 个 Token', other: '上下文容量 ${n} 个 Token', ), 
 			'ai.session.plan' => '计划',
 			'ai.session.availableCommands' => '可用命令',
 			'ai.session.authNotRequired' => '无需身份验证',
@@ -1787,7 +1865,7 @@ extension on TranslationsZhCn {
 			'sessions.liveCountSemantics' => ({required Object live, required Object total}) => '${live} 个运行中的会话，共 ${total} 个会话',
 			'sessions.listTitle' => '会话',
 			'sessions.selectSemantics' => ({required Object project, required Object platform, required Object session}) => '${project}，${platform}，会话 ${session}',
-			'sessions.refreshFailed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个项目刷新失败。', other: '${n} 个项目刷新失败。', ),
+			'sessions.refreshFailed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个项目刷新失败。', other: '${n} 个项目刷新失败。', ), 
 			'sessions.refreshProjectFailed' => '项目刷新失败。',
 			'sessions.stoppedMessage' => '此会话已不再活动。',
 			'sessions.bridgeReconnectingMessage' => '应用桥接正在重新连接。',
@@ -1824,8 +1902,8 @@ extension on TranslationsZhCn {
 			'sessions.data.notSet' => '未设置',
 			'sessions.data.copyLabel' => ({required Object label}) => '复制${label}',
 			'sessions.data.labelCopied' => ({required Object label}) => '${label}已复制',
-			'sessions.data.fields' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个字段', other: '${n} 个字段', ),
-			'sessions.data.items' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 项', other: '${n} 项', ),
+			'sessions.data.fields' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 个字段', other: '${n} 个字段', ), 
+			'sessions.data.items' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '${n} 项', other: '${n} 项', ), 
 			'sessions.overview.appProcess' => '应用进程',
 			'sessions.overview.reachable' => '可访问',
 			'sessions.overview.unavailable' => '不可用',
@@ -1884,11 +1962,11 @@ extension on TranslationsZhCn {
 			'sessions.logs.pathCopied' => '日志文件路径已复制',
 			'sessions.logs.startupTitle' => '启动与 Flutter 工具日志',
 			'sessions.logs.startupNone' => '暂无启动或 Flutter 工具日志。',
-			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行启动日志', other: '最近 ${n} 行启动日志', ),
+			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行启动日志', other: '最近 ${n} 行启动日志', ), 
 			'sessions.logs.startupRunningEmpty' => 'Cockpit 正在等待 Flutter 工具输出。',
 			'sessions.logs.title' => '应用日志',
 			'sessions.logs.none' => '未捕获到应用日志。',
-			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行日志', other: '最近 ${n} 行日志', ),
+			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行日志', other: '最近 ${n} 行日志', ), 
 			'sessions.logs.olderHidden' => '，更早日志已隐藏',
 			'sessions.logs.runningEmpty' => '应用正在运行，但尚未捕获到日志输出。',
 			'sessions.activityEmpty' => 'Cockpit 监听到的连接、路由、运行时错误和网络变化会显示在这里。',
@@ -1906,9 +1984,9 @@ extension on TranslationsZhCn {
 			'sessions.activity.routeDetail' => ({required Object from, required Object to}) => '${from} → ${to}',
 			'sessions.activity.unknownRoute' => '未知',
 			'sessions.activity.runtimeError' => '捕获到运行时错误',
-			'sessions.activity.runtimeErrorDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '当前快照中有 ${n} 个错误', other: '当前快照中有 ${n} 个错误', ),
+			'sessions.activity.runtimeErrorDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '当前快照中有 ${n} 个错误', other: '当前快照中有 ${n} 个错误', ), 
 			'sessions.activity.networkFailure' => '捕获到网络失败',
-			'sessions.activity.networkFailureDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已捕获 ${n} 个失败请求', other: '已捕获 ${n} 个失败请求', ),
+			'sessions.activity.networkFailureDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已捕获 ${n} 个失败请求', other: '已捕获 ${n} 个失败请求', ), 
 			'sessions.timeline.newestFirst' => '最新在前',
 			'sessions.timeline.showing' => ({required Object visible, required Object total}) => '${visible} / ${total}',
 			'sessions.timeline.all' => '全部',
@@ -1919,7 +1997,7 @@ extension on TranslationsZhCn {
 			'sessions.timeline.noMatch' => '没有符合当前筛选条件的事件。',
 			'sessions.timeline.expand' => '展开事件详情',
 			'sessions.timeline.collapse' => '收起事件详情',
-			'sessions.timeline.discarded' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '为保持内存稳定，已丢弃较早的 ${n} 个事件。', other: '为保持内存稳定，已丢弃较早的 ${n} 个事件。', ),
+			'sessions.timeline.discarded' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '为保持内存稳定，已丢弃较早的 ${n} 个事件。', other: '为保持内存稳定，已丢弃较早的 ${n} 个事件。', ), 
 			'sessions.timeline.severity.info' => '信息',
 			'sessions.timeline.severity.success' => '成功',
 			'sessions.timeline.severity.warning' => '警告',
@@ -1927,10 +2005,10 @@ extension on TranslationsZhCn {
 			'sessions.diagnostics.open' => '打开此分区以加载运行时错误和会话日志。',
 			'sessions.diagnostics.runtimeErrors' => '运行时错误',
 			'sessions.diagnostics.noRuntimeErrors' => '未捕获到运行时错误。',
-			'sessions.diagnostics.capturedErrors' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已捕获 ${n} 个运行时错误。', other: '已捕获 ${n} 个运行时错误。', ),
+			'sessions.diagnostics.capturedErrors' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已捕获 ${n} 个运行时错误。', other: '已捕获 ${n} 个运行时错误。', ), 
 			'sessions.diagnostics.sessionLogs' => '会话日志',
 			'sessions.diagnostics.noSessionLines' => '未捕获到会话生命周期日志。',
-			'sessions.diagnostics.recentSessionLines' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行生命周期日志。', other: '最近 ${n} 行生命周期日志。', ),
+			'sessions.diagnostics.recentSessionLines' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行生命周期日志。', other: '最近 ${n} 行生命周期日志。', ), 
 			'sessions.diagnostics.sessionLogsUnavailable' => '暂无会话生命周期日志。',
 			'sessions.diagnostics.runtimeError' => '运行时错误',
 			'sessions.network.open' => '打开此分区以加载最新网络请求。',
@@ -1959,6 +2037,48 @@ extension on TranslationsZhCn {
 			'sessions.network.empty' => '尚未捕获到网络请求。操作应用后刷新此分区。',
 			'sessions.network.unknownUri' => '未知地址',
 			'sessions.network.unknownSource' => '未知',
+			'recorder.title' => '交互录制',
+			'recorder.subtitle' => '将实时应用交互录制为可回放的测试用例',
+			'recorder.noSessionsTitle' => '没有实时会话',
+			'recorder.noSessionsDescription' => '先用 Cockpit 启动应用，然后在这里录制应用交互。',
+			'recorder.endpointLabel' => '端点',
+			'recorder.endpointNotConnected' => '未连接',
+			'recorder.connect' => '连接',
+			'recorder.recheck' => '重新检测',
+			'recorder.connecting' => '正在连接…',
+			'recorder.nameLabel' => '名称（可选）',
+			'recorder.start' => '开始',
+			'recorder.pause' => '暂停',
+			'recorder.resume' => '恢复',
+			'recorder.stop' => '停止',
+			'recorder.statusLine' => ({required Object phase, required Object steps, required Object unresolved}) => '${phase} · ${steps} · ${unresolved}',
+			'recorder.stepCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, other: '${n} 步', ), 
+			'recorder.unresolvedCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, other: '${n} 个未解析', ), 
+			'recorder.timelineTitle' => '时间线',
+			'recorder.timelineEmpty' => '操作应用时，录制的交互会显示在这里。',
+			'recorder.unresolvedStep' => '（未解析）',
+			'recorder.settledAfter' => ({required Object ms}) => '已稳定 · ${ms} 毫秒',
+			'recorder.exportTitle' => '导出预览',
+			'recorder.export' => '导出',
+			'recorder.exportHint' => '开始录制后即可导出用例 YAML。',
+			'recorder.copyYaml' => '复制 YAML',
+			'recorder.yamlCopied' => '已复制 YAML',
+			'recorder.save' => '保存',
+			'recorder.saveDocument' => '保存用例文档',
+			'recorder.documentSaved' => ({required Object path}) => '已保存到 ${path}',
+			'recorder.saveFailed' => ({required Object error}) => '保存失败：${error}',
+			'recorder.phase.idle' => '空闲',
+			'recorder.phase.recording' => '录制中',
+			'recorder.phase.paused' => '已暂停',
+			'recorder.phase.stopped' => '已停止',
+			'recorder.kind.tap' => '点按',
+			'recorder.kind.longPress' => '长按',
+			'recorder.kind.text' => '输入文本',
+			'recorder.kind.scroll' => '滚动',
+			'recorder.kind.routeChange' => '路由切换',
+			'recorder.kind.back' => '返回',
+			'recorder.kind.marker' => '标记',
+			'recorder.kind.note' => '备注',
 			_ => null,
 		};
 	}

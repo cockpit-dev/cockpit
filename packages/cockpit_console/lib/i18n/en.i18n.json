@@ -28,6 +28,7 @@
     "projects": "Projects",
     "apps_devices": "Apps & devices",
     "live_sessions": "Live sessions",
+    "recorder": "Recorder",
     "tests": "Tests",
     "test_runs": "Test runs",
     "actions": "Actions",
@@ -855,6 +856,60 @@
       "empty": "No network requests were captured. Use the app, then refresh this section.",
       "unknown_uri": "Unknown URI",
       "unknown_source": "Unknown"
+    }
+  },
+  "recorder": {
+    "title": "Interaction recorder",
+    "subtitle": "Record live app interactions into a replayable test case",
+    "no_sessions_title": "No live sessions",
+    "no_sessions_description": "Start an app with Cockpit, then record its interactions here.",
+    "endpoint_label": "Endpoint",
+    "endpoint_not_connected": "Not connected",
+    "connect": "Connect",
+    "recheck": "Recheck",
+    "connecting": "Connecting…",
+    "name_label": "Name (optional)",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "status_line": "{{phase}} · {{steps}} · {{unresolved}}",
+    "step_count": {
+      "one": "{{n}} step",
+      "other": "{{n}} steps"
+    },
+    "unresolved_count": {
+      "one": "{{n}} unresolved",
+      "other": "{{n}} unresolved"
+    },
+    "timeline_title": "Timeline",
+    "timeline_empty": "Recorded interactions appear here while the app is used.",
+    "unresolved_step": "(unresolved)",
+    "settled_after": "settled · {{ms}} ms",
+    "export_title": "Export preview",
+    "export": "Export",
+    "export_hint": "Start a recording, then export its case YAML.",
+    "copy_yaml": "Copy YAML",
+    "yaml_copied": "YAML copied",
+    "save": "Save",
+    "save_document": "Save case document",
+    "document_saved": "Saved {{path}}",
+    "save_failed": "Could not save: {{error}}",
+    "phase": {
+      "idle": "Idle",
+      "recording": "Recording",
+      "paused": "Paused",
+      "stopped": "Stopped"
+    },
+    "kind": {
+      "tap": "Tap",
+      "long_press": "Long press",
+      "text": "Text",
+      "scroll": "Scroll",
+      "route_change": "Route change",
+      "back": "Back",
+      "marker": "Marker",
+      "note": "Note"
     }
   }
 }

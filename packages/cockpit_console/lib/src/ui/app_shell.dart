@@ -4,6 +4,7 @@ import 'package:cockpit_console/src/ui/screens/ai_chat_screen.dart';
 import 'package:cockpit_console/src/ui/screens/dashboard_screen.dart';
 import 'package:cockpit_console/src/ui/screens/documents_screen.dart';
 import 'package:cockpit_console/src/ui/screens/operations_screen.dart';
+import 'package:cockpit_console/src/ui/screens/recorder_screen.dart';
 import 'package:cockpit_console/src/ui/screens/runs_screen.dart';
 import 'package:cockpit_console/src/ui/screens/session_monitor_screen.dart';
 import 'package:cockpit_console/src/ui/screens/targets_screen.dart';
@@ -102,6 +103,7 @@ final class AppShell extends HookConsumerWidget {
       ConsoleNavDestination.workspaces => const WorkspacesScreen(),
       ConsoleNavDestination.targets => const TargetsScreen(),
       ConsoleNavDestination.sessions => const SessionMonitorScreen(),
+      ConsoleNavDestination.recorder => const RecorderScreen(),
       ConsoleNavDestination.documents => const DocumentsScreen(),
       ConsoleNavDestination.runs => const RunsScreen(),
       ConsoleNavDestination.operations => const OperationsScreen(),

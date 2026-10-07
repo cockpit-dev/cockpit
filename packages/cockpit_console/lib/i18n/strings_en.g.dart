@@ -54,6 +54,7 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	late final Translations$actions$en actions = Translations$actions$en.internal(_root);
 	late final Translations$ai$en ai = Translations$ai$en.internal(_root);
 	late final Translations$sessions$en sessions = Translations$sessions$en.internal(_root);
+	late final Translations$recorder$en recorder = Translations$recorder$en.internal(_root);
 }
 
 // Path: app
@@ -156,6 +157,9 @@ class Translations$nav$en {
 
 	/// en: 'Live sessions'
 	String get liveSessions => 'Live sessions';
+
+	/// en: 'Recorder'
+	String get recorder => 'Recorder';
 
 	/// en: 'Tests'
 	String get tests => 'Tests';
@@ -1410,6 +1414,114 @@ class Translations$sessions$en {
 	late final Translations$sessions$network$en network = Translations$sessions$network$en.internal(_root);
 }
 
+// Path: recorder
+class Translations$recorder$en {
+	Translations$recorder$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: 'Interaction recorder'
+	String get title => 'Interaction recorder';
+
+	/// en: 'Record live app interactions into a replayable test case'
+	String get subtitle => 'Record live app interactions into a replayable test case';
+
+	/// en: 'No live sessions'
+	String get noSessionsTitle => 'No live sessions';
+
+	/// en: 'Start an app with Cockpit, then record its interactions here.'
+	String get noSessionsDescription => 'Start an app with Cockpit, then record its interactions here.';
+
+	/// en: 'Endpoint'
+	String get endpointLabel => 'Endpoint';
+
+	/// en: 'Not connected'
+	String get endpointNotConnected => 'Not connected';
+
+	/// en: 'Connect'
+	String get connect => 'Connect';
+
+	/// en: 'Recheck'
+	String get recheck => 'Recheck';
+
+	/// en: 'Connecting…'
+	String get connecting => 'Connecting…';
+
+	/// en: 'Name (optional)'
+	String get nameLabel => 'Name (optional)';
+
+	/// en: 'Start'
+	String get start => 'Start';
+
+	/// en: 'Pause'
+	String get pause => 'Pause';
+
+	/// en: 'Resume'
+	String get resume => 'Resume';
+
+	/// en: 'Stop'
+	String get stop => 'Stop';
+
+	/// en: '{{phase}} · {{steps}} · {{unresolved}}'
+	String statusLine({required Object phase, required Object steps, required Object unresolved}) => '${phase} · ${steps} · ${unresolved}';
+
+	/// en: '(one) {{{n}} step} (other) {{{n}} steps}'
+	String stepCount({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n,
+		one: '${n} step',
+		other: '${n} steps',
+	);
+
+	/// en: '(one) {{{n}} unresolved} (other) {{{n}} unresolved}'
+	String unresolvedCount({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n,
+		one: '${n} unresolved',
+		other: '${n} unresolved',
+	);
+
+	/// en: 'Timeline'
+	String get timelineTitle => 'Timeline';
+
+	/// en: 'Recorded interactions appear here while the app is used.'
+	String get timelineEmpty => 'Recorded interactions appear here while the app is used.';
+
+	/// en: '(unresolved)'
+	String get unresolvedStep => '(unresolved)';
+
+	/// en: 'settled · {{ms}} ms'
+	String settledAfter({required Object ms}) => 'settled · ${ms} ms';
+
+	/// en: 'Export preview'
+	String get exportTitle => 'Export preview';
+
+	/// en: 'Export'
+	String get export => 'Export';
+
+	/// en: 'Start a recording, then export its case YAML.'
+	String get exportHint => 'Start a recording, then export its case YAML.';
+
+	/// en: 'Copy YAML'
+	String get copyYaml => 'Copy YAML';
+
+	/// en: 'YAML copied'
+	String get yamlCopied => 'YAML copied';
+
+	/// en: 'Save'
+	String get save => 'Save';
+
+	/// en: 'Save case document'
+	String get saveDocument => 'Save case document';
+
+	/// en: 'Saved {{path}}'
+	String documentSaved({required Object path}) => 'Saved ${path}';
+
+	/// en: 'Could not save: {{error}}'
+	String saveFailed({required Object error}) => 'Could not save: ${error}';
+
+	late final Translations$recorder$phase$en phase = Translations$recorder$phase$en.internal(_root);
+	late final Translations$recorder$kind$en kind = Translations$recorder$kind$en.internal(_root);
+}
+
 // Path: targets.kind
 class Translations$targets$kind$en {
 	Translations$targets$kind$en.internal(this._root);
@@ -2650,6 +2762,60 @@ class Translations$sessions$network$en {
 	String get unknownSource => 'Unknown';
 }
 
+// Path: recorder.phase
+class Translations$recorder$phase$en {
+	Translations$recorder$phase$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: 'Idle'
+	String get idle => 'Idle';
+
+	/// en: 'Recording'
+	String get recording => 'Recording';
+
+	/// en: 'Paused'
+	String get paused => 'Paused';
+
+	/// en: 'Stopped'
+	String get stopped => 'Stopped';
+}
+
+// Path: recorder.kind
+class Translations$recorder$kind$en {
+	Translations$recorder$kind$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: 'Tap'
+	String get tap => 'Tap';
+
+	/// en: 'Long press'
+	String get longPress => 'Long press';
+
+	/// en: 'Text'
+	String get text => 'Text';
+
+	/// en: 'Scroll'
+	String get scroll => 'Scroll';
+
+	/// en: 'Route change'
+	String get routeChange => 'Route change';
+
+	/// en: 'Back'
+	String get back => 'Back';
+
+	/// en: 'Marker'
+	String get marker => 'Marker';
+
+	/// en: 'Note'
+	String get note => 'Note';
+}
+
 // Path: ai.tool.status
 class Translations$ai$tool$status$en {
 	Translations$ai$tool$status$en.internal(this._root);
@@ -2719,6 +2885,7 @@ extension on Translations {
 			'nav.projects' => 'Projects',
 			'nav.appsDevices' => 'Apps & devices',
 			'nav.liveSessions' => 'Live sessions',
+			'nav.recorder' => 'Recorder',
 			'nav.tests' => 'Tests',
 			'nav.testRuns' => 'Test runs',
 			'nav.actions' => 'Actions',
@@ -2896,7 +3063,7 @@ extension on Translations {
 			'tests.emptyTitle' => 'No test files yet',
 			'tests.emptyDescription' => 'Create a test, save it, then check it before running.',
 			'tests.suite' => 'Test suite',
-			'tests.suiteCases' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: 'Test suite · ${n} case', other: 'Test suite · ${n} cases', ),
+			'tests.suiteCases' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: 'Test suite · ${n} case', other: 'Test suite · ${n} cases', ), 
 			'tests.testCase' => 'Test case',
 			'tests.filePath' => 'Test file path',
 			'tests.filePathHint' => 'Relative to project, for example cockpit/e2e/case.yaml',
@@ -2980,7 +3147,7 @@ extension on Translations {
 			'runs.timeoutHint' => 'Use the default, for example 30s or 5m',
 			'runs.recentUnavailable' => 'Recent runs are temporarily unavailable',
 			'runs.loadingRun' => 'Loading run',
-			'runs.events' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} event', other: '${n} events', ),
+			'runs.events' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} event', other: '${n} events', ), 
 			'runs.newRun' => 'New run',
 			'runs.cancelRun' => 'Cancel run',
 			'runs.recentRuns' => 'Recent runs',
@@ -3146,7 +3313,7 @@ extension on Translations {
 			'ai.connection.selectSessionDirectory' => 'Select session working directory',
 			'ai.connection.sessionContext' => 'Session context',
 			'ai.connection.optionalContext' => 'Optional directories and MCP servers',
-			'ai.connection.configuredItems' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} configured item', other: '${n} configured items', ),
+			'ai.connection.configuredItems' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} configured item', other: '${n} configured items', ), 
 			'ai.connection.additionalDirectories' => 'Additional directories',
 			'ai.connection.additionalDirectoriesDescription' => 'Grant the agent access to workspace roots beyond the working directory.',
 			'ai.connection.addDirectory' => 'Add directory',
@@ -3197,7 +3364,7 @@ extension on Translations {
 			'ai.session.noneSaved' => 'No saved sessions were returned by this agent.',
 			'ai.session.loadMore' => 'Load more',
 			'ai.session.activeSession' => 'Active session',
-			'ai.session.additionalDirectories' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} additional directory', other: '${n} additional directories', ),
+			'ai.session.additionalDirectories' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} additional directory', other: '${n} additional directories', ), 
 			'ai.session.mcpServers' => ({required Object names}) => 'MCP: ${names}',
 			'ai.session.active' => 'Active',
 			'ai.session.actions' => 'Session actions',
@@ -3208,12 +3375,12 @@ extension on Translations {
 			'ai.session.settings' => 'Agent settings',
 			'ai.session.mode' => 'Mode',
 			'ai.session.noSettings' => 'This agent did not advertise session settings.',
-			'ai.session.currentContext' => 'Current context',
 			_ => null,
 		} ?? switch (path) {
+			'ai.session.currentContext' => 'Current context',
 			'ai.session.usage' => 'Usage',
-			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} token used', other: '${n} tokens used', ),
-			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n}-token context', other: '${n}-token context', ),
+			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} token used', other: '${n} tokens used', ), 
+			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n}-token context', other: '${n}-token context', ), 
 			'ai.session.plan' => 'Plan',
 			'ai.session.availableCommands' => 'Available commands',
 			'ai.session.authNotRequired' => 'Authentication is not required',
@@ -3257,7 +3424,7 @@ extension on Translations {
 			'sessions.liveCountSemantics' => ({required Object live, required Object total}) => '${live} live sessions, ${total} total sessions',
 			'sessions.listTitle' => 'Sessions',
 			'sessions.selectSemantics' => ({required Object project, required Object platform, required Object session}) => '${project}, ${platform}, session ${session}',
-			'sessions.refreshFailed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: 'Could not refresh ${n} project.', other: 'Could not refresh ${n} projects.', ),
+			'sessions.refreshFailed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: 'Could not refresh ${n} project.', other: 'Could not refresh ${n} projects.', ), 
 			'sessions.refreshProjectFailed' => 'Project refresh failed.',
 			'sessions.stoppedMessage' => 'This session is no longer active.',
 			'sessions.bridgeReconnectingMessage' => 'The app bridge is reconnecting.',
@@ -3294,8 +3461,8 @@ extension on Translations {
 			'sessions.data.notSet' => 'Not set',
 			'sessions.data.copyLabel' => ({required Object label}) => 'Copy ${label}',
 			'sessions.data.labelCopied' => ({required Object label}) => '${label} copied',
-			'sessions.data.fields' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} field', other: '${n} fields', ),
-			'sessions.data.items' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} item', other: '${n} items', ),
+			'sessions.data.fields' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} field', other: '${n} fields', ), 
+			'sessions.data.items' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} item', other: '${n} items', ), 
 			'sessions.overview.appProcess' => 'App process',
 			'sessions.overview.reachable' => 'Reachable',
 			'sessions.overview.unavailable' => 'Unavailable',
@@ -3354,11 +3521,11 @@ extension on Translations {
 			'sessions.logs.pathCopied' => 'Log file path copied',
 			'sessions.logs.startupTitle' => 'Startup and Flutter tool logs',
 			'sessions.logs.startupNone' => 'No startup or Flutter tool log lines were captured.',
-			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent startup log line', other: '${n} recent startup log lines', ),
+			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent startup log line', other: '${n} recent startup log lines', ), 
 			'sessions.logs.startupRunningEmpty' => 'Cockpit is waiting for Flutter tool output.',
 			'sessions.logs.title' => 'Application logs',
 			'sessions.logs.none' => 'No application log lines were captured.',
-			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent log line', other: '${n} recent log lines', ),
+			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent log line', other: '${n} recent log lines', ), 
 			'sessions.logs.olderHidden' => ', older lines hidden',
 			'sessions.logs.runningEmpty' => 'The app is running without captured log output.',
 			'sessions.activityEmpty' => 'Connection, route, runtime error, and network changes appear here as Cockpit observes them.',
@@ -3376,9 +3543,9 @@ extension on Translations {
 			'sessions.activity.routeDetail' => ({required Object from, required Object to}) => '${from} → ${to}',
 			'sessions.activity.unknownRoute' => 'unknown',
 			'sessions.activity.runtimeError' => 'Runtime error captured',
-			'sessions.activity.runtimeErrorDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} error in the current snapshot', other: '${n} errors in the current snapshot', ),
+			'sessions.activity.runtimeErrorDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} error in the current snapshot', other: '${n} errors in the current snapshot', ), 
 			'sessions.activity.networkFailure' => 'Network failure captured',
-			'sessions.activity.networkFailureDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} failed request captured', other: '${n} failed requests captured', ),
+			'sessions.activity.networkFailureDetail' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} failed request captured', other: '${n} failed requests captured', ), 
 			'sessions.timeline.newestFirst' => 'Newest first',
 			'sessions.timeline.showing' => ({required Object visible, required Object total}) => '${visible} / ${total}',
 			'sessions.timeline.all' => 'All',
@@ -3389,7 +3556,7 @@ extension on Translations {
 			'sessions.timeline.noMatch' => 'No events match this filter.',
 			'sessions.timeline.expand' => 'Show event details',
 			'sessions.timeline.collapse' => 'Hide event details',
-			'sessions.timeline.discarded' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} older event was discarded to keep memory stable.', other: '${n} older events were discarded to keep memory stable.', ),
+			'sessions.timeline.discarded' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} older event was discarded to keep memory stable.', other: '${n} older events were discarded to keep memory stable.', ), 
 			'sessions.timeline.severity.info' => 'Info',
 			'sessions.timeline.severity.success' => 'Success',
 			'sessions.timeline.severity.warning' => 'Warning',
@@ -3397,10 +3564,10 @@ extension on Translations {
 			'sessions.diagnostics.open' => 'Open this section to load runtime errors and session logs.',
 			'sessions.diagnostics.runtimeErrors' => 'Runtime errors',
 			'sessions.diagnostics.noRuntimeErrors' => 'No runtime errors were captured.',
-			'sessions.diagnostics.capturedErrors' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} captured runtime error.', other: '${n} captured runtime errors.', ),
+			'sessions.diagnostics.capturedErrors' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} captured runtime error.', other: '${n} captured runtime errors.', ), 
 			'sessions.diagnostics.sessionLogs' => 'Session logs',
 			'sessions.diagnostics.noSessionLines' => 'No session lifecycle log lines were captured.',
-			'sessions.diagnostics.recentSessionLines' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent lifecycle log line.', other: '${n} recent lifecycle log lines.', ),
+			'sessions.diagnostics.recentSessionLines' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent lifecycle log line.', other: '${n} recent lifecycle log lines.', ), 
 			'sessions.diagnostics.sessionLogsUnavailable' => 'No session lifecycle logs are available.',
 			'sessions.diagnostics.runtimeError' => 'Runtime error',
 			'sessions.network.open' => 'Open this section to load the latest network requests.',
@@ -3429,6 +3596,48 @@ extension on Translations {
 			'sessions.network.empty' => 'No network requests were captured. Use the app, then refresh this section.',
 			'sessions.network.unknownUri' => 'Unknown URI',
 			'sessions.network.unknownSource' => 'Unknown',
+			'recorder.title' => 'Interaction recorder',
+			'recorder.subtitle' => 'Record live app interactions into a replayable test case',
+			'recorder.noSessionsTitle' => 'No live sessions',
+			'recorder.noSessionsDescription' => 'Start an app with Cockpit, then record its interactions here.',
+			'recorder.endpointLabel' => 'Endpoint',
+			'recorder.endpointNotConnected' => 'Not connected',
+			'recorder.connect' => 'Connect',
+			'recorder.recheck' => 'Recheck',
+			'recorder.connecting' => 'Connecting…',
+			'recorder.nameLabel' => 'Name (optional)',
+			'recorder.start' => 'Start',
+			'recorder.pause' => 'Pause',
+			'recorder.resume' => 'Resume',
+			'recorder.stop' => 'Stop',
+			'recorder.statusLine' => ({required Object phase, required Object steps, required Object unresolved}) => '${phase} · ${steps} · ${unresolved}',
+			'recorder.stepCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} step', other: '${n} steps', ), 
+			'recorder.unresolvedCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} unresolved', other: '${n} unresolved', ), 
+			'recorder.timelineTitle' => 'Timeline',
+			'recorder.timelineEmpty' => 'Recorded interactions appear here while the app is used.',
+			'recorder.unresolvedStep' => '(unresolved)',
+			'recorder.settledAfter' => ({required Object ms}) => 'settled · ${ms} ms',
+			'recorder.exportTitle' => 'Export preview',
+			'recorder.export' => 'Export',
+			'recorder.exportHint' => 'Start a recording, then export its case YAML.',
+			'recorder.copyYaml' => 'Copy YAML',
+			'recorder.yamlCopied' => 'YAML copied',
+			'recorder.save' => 'Save',
+			'recorder.saveDocument' => 'Save case document',
+			'recorder.documentSaved' => ({required Object path}) => 'Saved ${path}',
+			'recorder.saveFailed' => ({required Object error}) => 'Could not save: ${error}',
+			'recorder.phase.idle' => 'Idle',
+			'recorder.phase.recording' => 'Recording',
+			'recorder.phase.paused' => 'Paused',
+			'recorder.phase.stopped' => 'Stopped',
+			'recorder.kind.tap' => 'Tap',
+			'recorder.kind.longPress' => 'Long press',
+			'recorder.kind.text' => 'Text',
+			'recorder.kind.scroll' => 'Scroll',
+			'recorder.kind.routeChange' => 'Route change',
+			'recorder.kind.back' => 'Back',
+			'recorder.kind.marker' => 'Marker',
+			'recorder.kind.note' => 'Note',
 			_ => null,
 		};
 	}
