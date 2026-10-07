@@ -163,6 +163,14 @@ final class _InteractionRecorderTimelineState
         _scrollController.position.jumpTo(
           _scrollController.position.maxScrollExtent,
         );
+        // A lazily built list settles its extent one frame after the jump;
+        // follow once more so the newest step is actually in view.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          _scrollController.position.jumpTo(
+            _scrollController.position.maxScrollExtent,
+          );
+        });
       });
     }
     _observedStepCount = widget.steps.length;

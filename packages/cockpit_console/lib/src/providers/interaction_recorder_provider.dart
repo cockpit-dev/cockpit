@@ -196,6 +196,7 @@ final class InteractionRecorderNotifier
   InteractionRecorderClient? _client;
   int _cursor = 0;
   String? _consumedSessionId;
+  int _connectGeneration = 0;
 
   @override
   InteractionRecorderState build() {
@@ -221,6 +222,7 @@ final class InteractionRecorderNotifier
   /// session, and resolves its live recorder endpoint.
   void select(SessionMonitorKey key) {
     if (key == state.selected && _client != null) return;
+    _connectGeneration++;
     _client = null;
     _cursor = 0;
     _consumedSessionId = null;
@@ -228,13 +230,17 @@ final class InteractionRecorderNotifier
     unawaited(connect());
   }
 
-  /// (Re)resolves the endpoint of the selected session.
+  /// (Re)resolves the endpoint of the selected session. A selection change
+  /// while an attempt is in flight supersedes it: the stale result is
+  /// discarded so the page never adopts another session's endpoint.
   Future<void> connect() async {
     final key = state.selected;
     if (key == null || state.connecting) return;
+    final generation = ++_connectGeneration;
     state = state.copyWith(connecting: true, connectionError: null);
     try {
       final client = await ref.read(interactionRecorderConnectorProvider)(key);
+      if (!ref.mounted || generation != _connectGeneration) return;
       _client = client;
       _cursor = 0;
       _consumedSessionId = null;
@@ -246,6 +252,7 @@ final class InteractionRecorderNotifier
       );
       unawaited(poll());
     } on Object catch (error) {
+      if (!ref.mounted || generation != _connectGeneration) return;
       _client = null;
       state = state.copyWith(connecting: false, connectionError: '$error');
     }
@@ -269,11 +276,18 @@ final class InteractionRecorderNotifier
     try {
       await run(client);
     } on Object catch (error) {
-      state = state.copyWith(commandBusy: false, commandError: '$error');
+      if (!ref.mounted) return;
+      // A selection change always resets the busy flag; an error only
+      // belongs to the session the command was issued against.
+      state = state.copyWith(
+        commandBusy: false,
+        commandError: identical(client, _client) ? '$error' : null,
+      );
       return;
     }
+    if (!ref.mounted) return;
     state = state.copyWith(commandBusy: false);
-    await poll();
+    if (identical(client, _client)) await poll();
   }
 
   /// Reads the session status and drains newly settled steps.
@@ -283,6 +297,10 @@ final class InteractionRecorderNotifier
     _polling = true;
     try {
       final status = await client.status();
+      // The bound session may have changed while awaiting; the stale read
+      // must not leak into the new session's timeline, and a provider
+      // disposed with its page must not receive state at all.
+      if (!ref.mounted || !identical(client, _client)) return;
       final sessionId = status['sessionId'] as String?;
       // A sessionId the page has not consumed yet means a new recording
       // session started on the app; the timeline restarts from its steps.
@@ -292,6 +310,7 @@ final class InteractionRecorderNotifier
         _consumedSessionId = sessionId;
       }
       final drained = await client.steps(after: _cursor);
+      if (!ref.mounted || !identical(client, _client)) return;
       final rawSteps = drained['steps'];
       final appended = rawSteps is List<Object?>
           ? <CockpitInteractionStep>[
@@ -316,7 +335,9 @@ final class InteractionRecorderNotifier
             : <CockpitInteractionStep>[...state.steps, ...appended],
       );
     } on Object catch (error) {
-      state = state.copyWith(connectionError: '$error');
+      if (ref.mounted) {
+        state = state.copyWith(connectionError: '$error');
+      }
     } finally {
       _polling = false;
     }
@@ -329,9 +350,18 @@ final class InteractionRecorderNotifier
     state = state.copyWith(exporting: true, commandError: null);
     try {
       final yaml = await client.exportCaseYaml();
-      state = state.copyWith(exporting: false, document: yaml);
+      if (!ref.mounted) return;
+      // A stale export must not preview another session's document.
+      state = state.copyWith(
+        exporting: false,
+        document: identical(client, _client) ? yaml : null,
+      );
     } on Object catch (error) {
-      state = state.copyWith(exporting: false, commandError: '$error');
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        exporting: false,
+        commandError: identical(client, _client) ? '$error' : null,
+      );
     }
   }
 }
