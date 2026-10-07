@@ -152,7 +152,9 @@ final class CockpitRecordedFlowConverter {
       case CockpitInteractionStepKind.marker || CockpitInteractionStepKind.note:
         return null;
       case CockpitInteractionStepKind.routeChange:
-        if (step.routeName == null) {
+        // An empty route name carries nothing to wait for, exactly like a
+        // missing one; the model permits it, so drop instead of throwing.
+        if (step.routeName == null || step.routeName!.isEmpty) {
           return null;
         }
         return _ExportableStep(step, null, isSetup: isSetup);

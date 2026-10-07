@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 
+import '../foundation/cockpit_foundation_constraints.dart';
 import '../foundation/cockpit_foundation_value_reader.dart';
 import 'cockpit_interaction_recording_session.dart';
 import 'cockpit_interaction_step.dart';
@@ -87,6 +88,9 @@ final class CockpitRecordedFlowBundle {
       caseYaml: CockpitFoundationValueReader.string(
         required('caseYaml'),
         '$path.caseYaml',
+        // Rendered case YAML routinely exceeds the default text bound; cap it
+        // at the protocol request ceiling instead.
+        maximum: cockpitFoundationRequestMaximumBytes,
       ),
     );
   }

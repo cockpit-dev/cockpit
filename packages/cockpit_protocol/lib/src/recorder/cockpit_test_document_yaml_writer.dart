@@ -148,8 +148,9 @@ final class CockpitTestDocumentYamlWriter {
     caseSensitive: false,
   );
   static final RegExp _yamlNumber = RegExp(
-    '^(?:[-+]?(?:0|[1-9][0-9]*|0[0-7]+|0[xX][0-9a-fA-F]+)'
+    '^(?:[-+]?(?:[0-9]+|0[xX][0-9a-fA-F]+|0[oO][0-7]+)'
     r'(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?'
+    r'|[-+]?\.[0-9]+(?:[eE][-+]?[0-9]+)?'
     r'|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$',
   );
 
@@ -169,7 +170,9 @@ final class CockpitTestDocumentYamlWriter {
     }
     for (var index = 0; index < value.length; index++) {
       final unit = value.codeUnitAt(index);
-      if (unit < 0x20) return true;
+      // DEL is unprintable like the C0 controls and must reach [_quote],
+      // which knows how to escape it.
+      if (unit < 0x20 || unit == 0x7f) return true;
       if (unit == 0x22 || unit == 0x5c) return true;
     }
     if (value.contains(': ') || value.endsWith(':')) return true;
