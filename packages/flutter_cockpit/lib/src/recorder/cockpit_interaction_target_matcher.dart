@@ -144,10 +144,12 @@ abstract final class CockpitInteractionTargetMatcher {
   }
 
   /// Hop count from [element] up to [ancestor], or `null` when [ancestor] is
-  /// not on the chain.
+  /// not on the chain. The direct parent is one hop: depth 0 belongs to the
+  /// element itself, so an equal-signal match on the element beats every
+  /// ancestor and nearer ancestors beat farther ones.
   static int? _ancestorDepth(Element element, Element ancestor) {
     int? depth;
-    var hops = 0;
+    var hops = 1;
     element.visitAncestorElements((candidate) {
       if (identical(candidate, ancestor)) {
         depth = hops;

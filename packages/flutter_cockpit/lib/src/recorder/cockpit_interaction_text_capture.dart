@@ -10,10 +10,12 @@ import 'cockpit_interaction_target_matcher.dart';
 /// The capture owns the focus subscription and the tracked field; the
 /// recorder, registry, and route name are read through provider callbacks so
 /// a capture created once always flushes through the widget tree's current
-/// wiring. Empty values are skipped, and a field whose element unmounted
-/// (taking its controller with it) flushes nothing. A before-stop hook on
-/// the recorder flushes a still-focused field when the session stops
-/// without focus leaving first.
+/// wiring. Empty values are skipped, a field inside a recorder-excluded
+/// subtree records nothing (the same tier-a marker and tier-b registry the
+/// pointer path consults), and a field whose element unmounted (taking its
+/// controller with it) flushes nothing. A before-stop hook on the recorder
+/// flushes a still-focused field when the session stops without focus
+/// leaving first.
 final class CockpitInteractionTextCapture {
   /// Creates a detached capture; call [attach] to start observing focus.
   CockpitInteractionTextCapture({
@@ -43,7 +45,10 @@ final class CockpitInteractionTextCapture {
   void detach() {
     FocusManager.instance.removeListener(_handleFocusUpdate);
     final recorder = _recorder();
-    if (identical(recorder.beforeStopHook, _flushTrackedField)) {
+    // Tear-offs are equal for the same receiver and method but not
+    // necessarily the same object, so compare with == or the hook is never
+    // recognized as ours.
+    if (recorder.beforeStopHook == _flushTrackedField) {
       recorder.beforeStopHook = null;
     }
     _element = null;
@@ -70,6 +75,13 @@ final class CockpitInteractionTextCapture {
     _element = null;
     _controller = null;
     if (element == null || controller == null || !element.mounted) {
+      return;
+    }
+    // The exclusion tiers gate text capture too: a host field inside an
+    // excluded subtree is chrome, not recorded product interaction.
+    final renderObject = element.findRenderObject();
+    if (renderObject != null &&
+        _recorder().exclusions.coversPath(<RenderObject>[renderObject])) {
       return;
     }
     final value = controller.text;
