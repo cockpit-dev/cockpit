@@ -96,7 +96,7 @@ command issued from an incompatible phase throws `StateError`, except
 | `scrollDirection` | enum? | `up/down/left/right` (kind `scroll`) |
 | `routeName` | `String?` | Route active when the step settled |
 | `fromRouteName` | `String?` | Previous route (kind `routeChange`) |
-| `position` | `Offset?` | Diagnostic only; never used for replay |
+| `positionDx`, `positionDy` | `double?` | Diagnostic only; never used for replay (`cockpit_protocol` is pure Dart — no `Offset`) |
 | `phase` | enum | `idle/recording/paused` — session phase at capture |
 | `unresolved` | `bool` | True when no target resolved (noise chrome) |
 | `segments` | `List<String>` | Segment marks active at capture (`markSegment` labels) |
