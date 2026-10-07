@@ -489,7 +489,7 @@ void main() {
       expect(recorder.steps, isEmpty);
     });
 
-    testWidgets('drops the pending value when focus leaves while stopped', (
+    testWidgets('stop flushes a still-focused field into the result', (
       tester,
     ) async {
       final controller = TextEditingController();
@@ -507,21 +507,27 @@ void main() {
       recorder.start();
       await tester.enterText(find.byType(TextField), 'draft');
       await tester.pumpAndSettle();
+      // Stop without unfocusing: the before-stop hook flushes the pending
+      // field while the session still accepts steps, so the text lands in
+      // the result.
       final result = recorder.stop();
       expect(
-        result.steps.where(
-          (step) => step.kind == CockpitInteractionStepKind.text,
-        ),
-        isEmpty,
+        result.steps
+            .where((step) => step.kind == CockpitInteractionStepKind.text)
+            .single
+            .resolvedValue,
+        'draft',
       );
 
+      // The flushed field is no longer tracked; a later focus change adds
+      // nothing to a stopped session.
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
       expect(
         recorder.steps.where(
           (step) => step.kind == CockpitInteractionStepKind.text,
         ),
-        isEmpty,
+        hasLength(1),
       );
     });
   });

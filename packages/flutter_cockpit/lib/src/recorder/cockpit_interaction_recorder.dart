@@ -1,15 +1,35 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show AxisDirection;
 
+import '../gesture/cockpit_gesture_action.dart';
+import '../gesture/cockpit_gesture_engine.dart';
+import '../runtime/cockpit_target_registry.dart';
+import '../runtime/cockpit_ui_idle_waiter.dart';
 import 'cockpit_recorder_exclusion.dart';
+import 'cockpit_replay_report.dart';
+
+/// Signature of the idle wait verify-replay runs between replayed steps.
+typedef CockpitReplayIdleWaiter =
+    Future<bool> Function({
+      required Duration quietWindow,
+      required Duration timeout,
+    });
+
+/// Signature of the gesture performer verify-replay dispatches through.
+typedef CockpitReplayGesturePerformer =
+    Future<void> Function(CockpitGestureAction action);
 
 /// Session engine for in-app interaction recording.
 ///
 /// Owns the phase machine (`idle → recording ⇄ paused → stopped`), the
 /// recorded step list, and the segment stack. The capture layer feeds
 /// observed interactions through [recordInteractionStep]; the exclusion
-/// registry it consults lives at [exclusions]. Export and verify-replay
-/// are implemented by later phases; the engine never carries stubs.
+/// registry it consults lives at [exclusions]. [export] converts the
+/// recorded steps through [CockpitRecordedFlowConverter] and
+/// [CockpitTestDocumentYamlWriter]; [verifyReplay] re-dispatches the
+/// actionable steps through the live automation path with capture
+/// suppressed.
 ///
 /// Step-stamping contract: the capture layer builds a
 /// [CockpitInteractionStep] with placeholder values for `stepId` (any
@@ -22,10 +42,29 @@ import 'cockpit_recorder_exclusion.dart';
 final class CockpitInteractionRecorder extends ChangeNotifier {
   /// Creates a recorder. Pass [now] to inject a clock; defaults to the
   /// system wall clock.
-  CockpitInteractionRecorder({DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  ///
+  /// [registry], [waitForIdle], and [gesturePerformer] back [verifyReplay];
+  /// the defaults (no registry, scheduler-quiet idle wait, a
+  /// [CockpitGestureEngine]) are sufficient everywhere except the registry,
+  /// which the owner (the Cockpit root) must wire for replay to be legal.
+  CockpitInteractionRecorder({
+    DateTime Function()? now,
+    CockpitTargetRegistry? registry,
+    CockpitReplayIdleWaiter? waitForIdle,
+    CockpitReplayGesturePerformer? gesturePerformer,
+  }) : _now = now ?? DateTime.now,
+       _registry = registry,
+       _waitForIdle = waitForIdle,
+       _gesturePerformer = gesturePerformer;
+
+  static const Duration _replayQuietWindow = Duration(milliseconds: 300);
+  static const Duration _replaySettleTimeout = Duration(seconds: 5);
 
   final DateTime Function() _now;
+  final CockpitTargetRegistry? _registry;
+  final CockpitReplayIdleWaiter? _waitForIdle;
+  final CockpitReplayGesturePerformer? _gesturePerformer;
+  CockpitGestureEngine? _gestureEngine;
 
   /// Subtree exclusion registry the capture layer consults per event.
   final CockpitRecorderExclusionRegistry exclusions =
@@ -42,6 +81,19 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   DateTime? _startedAt;
   DateTime? _pausedAt;
   DateTime? _endedAt;
+  bool _replaying = false;
+
+  /// Hook invoked at the top of [stop], while the session is still in the
+  /// `recording` or `paused` phase — so a hook's [recordInteractionStep]
+  /// calls land in the returned result. The text capture uses this to flush
+  /// a still-focused field. A single slot: setting a new hook replaces the
+  /// previous one, `null` clears it.
+  void Function()? beforeStopHook;
+
+  /// Whether a verify-replay pass is currently executing. Capture feeds
+  /// must drop events while this is true — a replay must not re-record
+  /// itself.
+  bool get isReplaying => _replaying;
 
   /// Current phase of the recording state machine.
   CockpitRecorderPhase get phase => _phase;
@@ -123,6 +175,9 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
 
   /// Stops the session. Legal while `recording` or `paused`; `stopped` is
   /// terminal until the next [start]. Returns the finished result.
+  ///
+  /// [beforeStopHook] runs first, while the session still accepts steps, so
+  /// its recordings are included in the result.
   CockpitInteractionRecordingResult stop() {
     if (_phase != CockpitRecorderPhase.recording &&
         _phase != CockpitRecorderPhase.paused) {
@@ -130,6 +185,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
         'Cannot stop an interaction recording while ${_phase.name}.',
       );
     }
+    beforeStopHook?.call();
     _phase = CockpitRecorderPhase.stopped;
     _endedAt = _now();
     final result = CockpitInteractionRecordingResult(
@@ -138,6 +194,219 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     );
     notifyListeners();
     return result;
+  }
+
+  /// Builds the export bundle of the current session: the recorded steps,
+  /// the converted case document, and its YAML rendering. Legal while
+  /// `recording`, `paused`, and `stopped` — steps are retained until the
+  /// next [start]. The case id derives from the engine-generated session id
+  /// (`recorded-r1`, `recorded-r2`, …), which always satisfies the case id
+  /// pattern by construction; the human-facing session name goes to the
+  /// case `name`, not the id.
+  ///
+  /// Throws [StateError] before any session started, and
+  /// [ArgumentError] (from the converter) when no exportable step exists.
+  CockpitRecordedFlowBundle export() {
+    _requireExportableSession('export');
+    final sessionId = _sessionId!;
+    final testCase = const CockpitRecordedFlowConverter().convert(
+      caseId: 'recorded-$sessionId',
+      steps: _steps,
+      name: _sessionName,
+      sessionId: sessionId,
+    );
+    final document = testCase.toJson();
+    return CockpitRecordedFlowBundle(
+      session: sessionSnapshot(),
+      steps: steps,
+      caseDocument: document,
+      caseYaml: const CockpitTestDocumentYamlWriter().write(document),
+    );
+  }
+
+  /// Replays the actionable recorded steps in-process and reports the
+  /// per-step outcome.
+  ///
+  /// Actionable kinds (`tap`, `longPress`, `scroll`, `text`) resolve their
+  /// locator candidates against the live registry — first candidate that
+  /// resolves wins — and dispatch through the same gesture engine the
+  /// automation path uses, or the target's text-input handlers for `text`
+  /// steps. Every other recorded step — non-actionable kinds and unresolved
+  /// noise — reports `skipped` so the panel timeline stays complete.
+  /// Capture is suppressed for the whole pass through [isReplaying] (the
+  /// phase machine is untouched — a replay from `stopped` must not pass
+  /// through illegal phases), and a short idle wait runs between steps.
+  /// Requires a wired registry and at least one actionable step.
+  Future<List<CockpitReplayReport>> verifyReplay() async {
+    _requireExportableSession('verify a replay for');
+    final registry = _registry;
+    if (registry == null) {
+      throw StateError(
+        'Cannot verify a replay: no target registry is wired to the '
+        'recorder.',
+      );
+    }
+    if (!_steps.any(_isActionable)) {
+      throw StateError(
+        'Cannot verify a replay: the session has no actionable step.',
+      );
+    }
+    _replaying = true;
+    notifyListeners();
+    try {
+      return <CockpitReplayReport>[
+        for (final step in _steps) await _replayStep(step, registry),
+      ];
+    } finally {
+      _replaying = false;
+      notifyListeners();
+    }
+  }
+
+  Future<CockpitReplayReport> _replayStep(
+    CockpitInteractionStep step,
+    CockpitTargetRegistry registry,
+  ) async {
+    if (!_isActionable(step)) {
+      return CockpitReplayReport(
+        stepId: step.stepId,
+        kind: step.kind,
+        status: CockpitReplayStatus.skipped,
+        reason: 'Kind ${step.kind.name} is not replayable in-process.',
+      );
+    }
+    CockpitTarget? target;
+    for (final candidate in step.locatorCandidates) {
+      final resolution = registry.resolve(
+        CockpitSelector.parse(candidate.selector),
+      );
+      if (resolution.isSuccess) {
+        target = resolution.target;
+        break;
+      }
+    }
+    if (target == null) {
+      return CockpitReplayReport(
+        stepId: step.stepId,
+        kind: step.kind,
+        status: CockpitReplayStatus.deviated,
+        reason:
+            'No locator candidate resolved against the live registry '
+            '(tried ${step.locatorCandidates.map((c) => c.selector).join(', ')}).',
+      );
+    }
+    try {
+      await _performStep(step, target);
+      await (_waitForIdle ?? _defaultWaitForIdle)(
+        quietWindow: _replayQuietWindow,
+        timeout: _replaySettleTimeout,
+      );
+      return CockpitReplayReport(
+        stepId: step.stepId,
+        kind: step.kind,
+        status: CockpitReplayStatus.passed,
+      );
+    } on Object catch (error) {
+      return CockpitReplayReport(
+        stepId: step.stepId,
+        kind: step.kind,
+        status: CockpitReplayStatus.deviated,
+        reason: 'Action failed: $error',
+      );
+    }
+  }
+
+  Future<void> _performStep(CockpitInteractionStep step, CockpitTarget target) {
+    switch (step.kind) {
+      case CockpitInteractionStepKind.tap:
+        return _performGesture(CockpitGestureAction.tap(target: target));
+      case CockpitInteractionStepKind.longPress:
+        return _performGesture(CockpitGestureAction.longPress(target: target));
+      case CockpitInteractionStepKind.scroll:
+        final direction = switch (step.scrollDirection!) {
+          CockpitInteractionScrollDirection.up => AxisDirection.up,
+          CockpitInteractionScrollDirection.down => AxisDirection.down,
+          CockpitInteractionScrollDirection.left => AxisDirection.left,
+          CockpitInteractionScrollDirection.right => AxisDirection.right,
+        };
+        return _performGesture(
+          CockpitGestureAction.swipe(target: target, direction: direction),
+        );
+      case CockpitInteractionStepKind.text:
+        return _performTextEntry(step, target);
+      case CockpitInteractionStepKind.routeChange ||
+          CockpitInteractionStepKind.back ||
+          CockpitInteractionStepKind.marker ||
+          CockpitInteractionStepKind.note:
+        throw StateError(
+          'Unreachable: ${step.kind.name} steps are skipped before dispatch.',
+        );
+    }
+  }
+
+  /// Text replay follows the executor's handler preference: the
+  /// request-based input handlers first, then the string-based enter-text
+  /// handlers.
+  Future<void> _performTextEntry(
+    CockpitInteractionStep step,
+    CockpitTarget target,
+  ) {
+    final value = step.resolvedValue!;
+    final textInput = target.onTextInput ?? target.onSemanticTextInput;
+    if (textInput != null) {
+      return Future<void>.sync(
+        () => textInput(CockpitTextInputRequest(text: value)),
+      );
+    }
+    final enterText = target.onEnterText ?? target.onSemanticEnterText;
+    if (enterText != null) {
+      return Future<void>.sync(() => enterText(value));
+    }
+    throw StateError('The resolved target does not accept text entry.');
+  }
+
+  Future<void> _performGesture(CockpitGestureAction action) {
+    return (_gesturePerformer ??
+        (_gestureEngine ??= CockpitGestureEngine()).perform)(action);
+  }
+
+  static Future<bool> _defaultWaitForIdle({
+    required Duration quietWindow,
+    required Duration timeout,
+  }) {
+    return waitForCockpitUiIdle(
+      quietWindow: quietWindow,
+      timeout: timeout,
+      waitTick: (duration) => Future<void>.delayed(duration),
+    );
+  }
+
+  static bool _isActionable(CockpitInteractionStep step) {
+    if (step.unresolved) {
+      return false;
+    }
+    return switch (step.kind) {
+      CockpitInteractionStepKind.tap ||
+      CockpitInteractionStepKind.longPress ||
+      CockpitInteractionStepKind.scroll ||
+      CockpitInteractionStepKind.text => true,
+      CockpitInteractionStepKind.routeChange ||
+      CockpitInteractionStepKind.back ||
+      CockpitInteractionStepKind.marker ||
+      CockpitInteractionStepKind.note => false,
+    };
+  }
+
+  void _requireExportableSession(String command) {
+    if (_sessionId == null ||
+        (_phase != CockpitRecorderPhase.recording &&
+            _phase != CockpitRecorderPhase.paused &&
+            _phase != CockpitRecorderPhase.stopped)) {
+      throw StateError(
+        'Cannot $command an interaction recording while '
+        '${_phase.name}.',
+      );
+    }
   }
 
   /// Opens a segment label. Legal only while `recording`. Segments nest;
@@ -183,13 +452,13 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
 
   /// Ingests a step captured by the capture layer.
   ///
-  /// Effective only while `recording`; steps arriving while paused or
-  /// stopped are silently dropped (pause suppression) and listeners are
-  /// not notified. See the class documentation for the step-stamping
-  /// contract: `stepId`, `phase`, `segments`, and `settledAfterMs` are
-  /// engine-owned and re-stamped here.
+  /// Effective only while `recording`; steps arriving while paused,
+  /// stopped, or mid-verify-replay are silently dropped (pause and replay
+  /// suppression) and listeners are not notified. See the class
+  /// documentation for the step-stamping contract: `stepId`, `phase`,
+  /// `segments`, and `settledAfterMs` are engine-owned and re-stamped here.
   void recordInteractionStep(CockpitInteractionStep step) {
-    if (_phase != CockpitRecorderPhase.recording) {
+    if (_phase != CockpitRecorderPhase.recording || _replaying) {
       return;
     }
     _stepSequence += 1;

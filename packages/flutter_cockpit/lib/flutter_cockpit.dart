@@ -55,6 +55,7 @@ export 'src/recording/cockpit_recording_result.dart';
 export 'src/recording/cockpit_recording_session.dart';
 export 'src/recording/cockpit_recording_state.dart';
 export 'src/recorder/cockpit_interaction_recorder.dart';
+export 'src/recorder/cockpit_replay_report.dart';
 export 'src/runtime/cockpit_capabilities.dart';
 export 'src/runtime/cockpit_accessibility_summary.dart';
 export 'src/runtime/cockpit_action_capability.dart';

@@ -635,7 +635,14 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     final shouldEnable =
         FlutterCockpit.binding.configuration.recorder.enabled && !kReleaseMode;
     if (shouldEnable) {
-      _interactionRecorder ??= CockpitInteractionRecorder();
+      _interactionRecorder ??= CockpitInteractionRecorder(
+        registry: FlutterCockpit.binding.registry,
+        // Replay settles through the root's idle wait (network-aware)
+        // rather than the recorder's scheduler-only default.
+        waitForIdle:
+            ({required Duration quietWindow, required Duration timeout}) =>
+                waitForUiIdle(quietWindow: quietWindow, timeout: timeout),
+      );
       return;
     }
     _interactionRecorder?.dispose();

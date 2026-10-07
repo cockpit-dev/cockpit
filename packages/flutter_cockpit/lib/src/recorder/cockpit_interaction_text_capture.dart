@@ -11,7 +11,9 @@ import 'cockpit_interaction_target_matcher.dart';
 /// recorder, registry, and route name are read through provider callbacks so
 /// a capture created once always flushes through the widget tree's current
 /// wiring. Empty values are skipped, and a field whose element unmounted
-/// (taking its controller with it) flushes nothing.
+/// (taking its controller with it) flushes nothing. A before-stop hook on
+/// the recorder flushes a still-focused field when the session stops
+/// without focus leaving first.
 final class CockpitInteractionTextCapture {
   /// Creates a detached capture; call [attach] to start observing focus.
   CockpitInteractionTextCapture({
@@ -29,14 +31,21 @@ final class CockpitInteractionTextCapture {
   Element? _element;
   TextEditingController? _controller;
 
-  /// Subscribes to global focus updates.
+  /// Subscribes to global focus updates and registers the before-stop
+  /// flush hook on the recorder.
   void attach() {
     FocusManager.instance.addListener(_handleFocusUpdate);
+    _recorder().beforeStopHook = _flushTrackedField;
   }
 
-  /// Unsubscribes and drops any tracked field without recording it.
+  /// Unsubscribes, clears the flush hook, and drops any tracked field
+  /// without recording it.
   void detach() {
     FocusManager.instance.removeListener(_handleFocusUpdate);
+    final recorder = _recorder();
+    if (identical(recorder.beforeStopHook, _flushTrackedField)) {
+      recorder.beforeStopHook = null;
+    }
     _element = null;
     _controller = null;
   }

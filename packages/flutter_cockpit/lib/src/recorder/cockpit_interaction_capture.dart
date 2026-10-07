@@ -174,7 +174,8 @@ final class _CockpitInteractionCaptureState
       return;
     }
     _activePointer = event.pointer;
-    if (widget.recorder.phase != CockpitRecorderPhase.recording) {
+    if (widget.recorder.phase != CockpitRecorderPhase.recording ||
+        widget.recorder.isReplaying) {
       return;
     }
     final result = HitTestResult();
@@ -281,7 +282,8 @@ final class _CockpitInteractionCaptureState
   }
 
   void _recordRouteChange({String? from, String? to}) {
-    if (widget.recorder.phase != CockpitRecorderPhase.recording) {
+    if (widget.recorder.phase != CockpitRecorderPhase.recording ||
+        widget.recorder.isReplaying) {
       return;
     }
     widget.recorder.recordInteractionStep(
