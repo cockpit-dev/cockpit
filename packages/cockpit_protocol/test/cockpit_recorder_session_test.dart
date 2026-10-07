@@ -75,6 +75,42 @@ void main() {
       );
     });
 
+    test('allows unresolvedCount == stepCount at the boundary', () {
+      final session = CockpitInteractionRecordingSession(
+        sessionId: 'session-all-noise',
+        phase: CockpitRecorderPhase.stopped,
+        startedAt: DateTime.utc(2026, 10, 7, 9, 30),
+        stepCount: 7,
+        unresolvedCount: 7,
+      );
+      final decoded = CockpitInteractionRecordingSession.fromJson(
+        session.toJson(),
+      );
+      expect(decoded, session);
+      expect(decoded.unresolvedCount, decoded.stepCount);
+    });
+
+    test('emits the exact full key set in template order', () {
+      final json = CockpitInteractionRecordingSession(
+        sessionId: 'session-1',
+        phase: CockpitRecorderPhase.paused,
+        startedAt: DateTime.utc(2026, 10, 7, 9, 30),
+        pausedAt: DateTime.utc(2026, 10, 7, 9, 35),
+        endedAt: DateTime.utc(2026, 10, 7, 9, 40),
+        stepCount: 12,
+        unresolvedCount: 3,
+      ).toJson();
+      expect(json.keys.toList(), const <String>[
+        'sessionId',
+        'phase',
+        'startedAt',
+        'pausedAt',
+        'endedAt',
+        'stepCount',
+        'unresolvedCount',
+      ]);
+    });
+
     test('fromJson reports paths for malformed payloads', () {
       expect(
         () => CockpitInteractionRecordingSession.fromJson(<String, Object?>{
@@ -138,6 +174,41 @@ void main() {
       expect(
         () => CockpitInteractionRecordingSession.fromJson('session-1'),
         throwsA(_formatExceptionAt(r'$')),
+      );
+    });
+
+    test('fromJson reports paths for optional timestamps and typed counts', () {
+      expect(
+        () => CockpitInteractionRecordingSession.fromJson(<String, Object?>{
+          'sessionId': 'session-1',
+          'phase': 'recording',
+          'startedAt': '2026-10-07T09:30:00.000Z',
+          'pausedAt': 5,
+          'stepCount': 0,
+          'unresolvedCount': 0,
+        }),
+        throwsA(_formatExceptionAt(r'$.pausedAt')),
+      );
+      expect(
+        () => CockpitInteractionRecordingSession.fromJson(<String, Object?>{
+          'sessionId': 'session-1',
+          'phase': 'recording',
+          'startedAt': '2026-10-07T09:30:00.000Z',
+          'endedAt': 'yesterday',
+          'stepCount': 0,
+          'unresolvedCount': 0,
+        }),
+        throwsA(_formatExceptionAt(r'$.endedAt')),
+      );
+      expect(
+        () => CockpitInteractionRecordingSession.fromJson(<String, Object?>{
+          'sessionId': 'session-1',
+          'phase': 'recording',
+          'startedAt': '2026-10-07T09:30:00.000Z',
+          'stepCount': '3',
+          'unresolvedCount': 0,
+        }),
+        throwsA(_formatExceptionAt(r'$.stepCount')),
       );
     });
 
@@ -213,6 +284,35 @@ void main() {
         isFalse,
       );
     });
+
+    test('fromJson rejects non-objects and oversized names with paths', () {
+      expect(
+        () => CockpitInteractionRecordingRequest.fromJson('start'),
+        throwsA(_formatExceptionAt(r'$')),
+      );
+      expect(
+        () => CockpitInteractionRecordingRequest.fromJson(<String, Object?>{
+          'name': 'x' * 4097,
+        }),
+        throwsA(_formatExceptionAt(r'$.name')),
+      );
+      expect(
+        () => CockpitInteractionRecordingRequest.fromJson(<String, Object?>{
+          'attachToStep': 7,
+        }),
+        throwsA(_formatExceptionAt(r'$.attachToStep')),
+      );
+    });
+
+    test('accepts an empty name as a bounded string', () {
+      // Names use boundedString semantics: empty is distinct from absent but
+      // still decodable, so the contract round-trips whatever arrived.
+      final request = CockpitInteractionRecordingRequest.fromJson(
+        const <String, Object?>{'name': ''},
+      );
+      expect(request.name, '');
+      expect(request.toJson(), const <String, Object?>{'name': ''});
+    });
   });
 
   group('CockpitInteractionRecordingResult', () {
@@ -259,6 +359,13 @@ void main() {
       expect(
         () => CockpitInteractionRecordingResult.fromJson(missingSteps),
         throwsA(_formatExceptionAt(r'$.steps')),
+      );
+    });
+
+    test('fromJson rejects a non-object payload with the path', () {
+      expect(
+        () => CockpitInteractionRecordingResult.fromJson(<Object?>['step']),
+        throwsA(_formatExceptionAt(r'$')),
       );
     });
   });
@@ -313,6 +420,10 @@ void main() {
 
     test('fromJson reports paths for malformed payloads', () {
       expect(
+        () => CockpitRecordedFlowBundle.fromJson(<Object?>['bundle']),
+        throwsA(_formatExceptionAt(r'$')),
+      );
+      expect(
         () => CockpitRecordedFlowBundle.fromJson(<String, Object?>{
           'session': _session().toJson(),
           'steps': const <Object?>[],
@@ -355,6 +466,71 @@ void main() {
         }),
         throwsA(_formatExceptionAt(r'$.session')),
       );
+    });
+
+    test(
+      'round-trips case YAML beyond the default 4096-character text bound',
+      () {
+        // A rendered case crosses 4096 characters after a handful of steps;
+        // the bundle must still decode its own output.
+        final largeYaml = StringBuffer('schemaVersion: cockpit.test/v2\n');
+        for (var index = 0; index < 400; index += 1) {
+          largeYaml.writeln('id: case-$index ${'x' * 40}');
+        }
+        expect(largeYaml.length, greaterThan(4096));
+        final bundle = CockpitRecordedFlowBundle(
+          session: _session(),
+          caseDocument: _caseDocument(),
+          caseYaml: largeYaml.toString(),
+        );
+        final decoded = CockpitRecordedFlowBundle.fromJson(bundle.toJson());
+        expect(decoded, bundle);
+        expect(decoded.caseYaml.length, largeYaml.length);
+      },
+    );
+
+    test('rejects case YAML beyond the request-size ceiling', () {
+      final oversized = 'x' * (1024 * 1024 + 1);
+      final bundle = CockpitRecordedFlowBundle(
+        session: _session(),
+        caseDocument: _caseDocument(),
+        caseYaml: oversized,
+      );
+      expect(
+        () => CockpitRecordedFlowBundle.fromJson(bundle.toJson()),
+        throwsA(_formatExceptionAt(r'$.caseYaml')),
+      );
+    });
+
+    test('round-trips deeply nested case documents', () {
+      final document = <String, Object?>{
+        'schemaVersion': 'cockpit.test/v2',
+        'id': 'nested',
+        'steps': <Object?>[
+          <String, Object?>{
+            'action': <String, Object?>{
+              'type': 'tap',
+              'locator': <String, Object?>{
+                'text': 'Save',
+                'fallbacks': <Object?>[
+                  <String, Object?>{
+                    'label': 'Saves',
+                    'fallbacks': <Object?>[
+                      <String, Object?>{'type': 'CustomZone'},
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      };
+      final bundle = CockpitRecordedFlowBundle(
+        session: _session(),
+        caseDocument: document,
+        caseYaml: 'id: nested\n',
+      );
+      expect(CockpitRecordedFlowBundle.fromJson(bundle.toJson()), bundle);
     });
 
     test('equality distinguishes every field', () {

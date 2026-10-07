@@ -22,6 +22,14 @@ void main() {
         () => CockpitRecorderPhase.fromJson(3, path: r'$.session.phase'),
         throwsA(_formatExceptionAt(r'$.session.phase')),
       );
+      expect(
+        () => CockpitRecorderPhase.fromJson(null),
+        throwsA(_formatExceptionAt(r'$.phase')),
+      );
+      expect(
+        () => CockpitRecorderPhase.fromJson(''),
+        throwsA(_formatExceptionAt(r'$.phase')),
+      );
     });
   });
 
@@ -67,6 +75,56 @@ void main() {
         expect(decoded.hashCode, candidate.hashCode);
       }
       expect(candidates[0], isNot(candidates[1]));
+    });
+
+    test('emits the exact key set in template order', () {
+      final candidate = CockpitLocatorCandidate(
+        kind: 'text',
+        selector: 'Save',
+        score: 2,
+      );
+      expect(candidate.toJson().keys.toList(), const <String>[
+        'kind',
+        'selector',
+        'score',
+      ]);
+    });
+
+    test('keeps long candidate lists in order across round trips', () {
+      final candidates = <CockpitLocatorCandidate>[
+        for (var index = 0; index < 12; index += 1)
+          CockpitLocatorCandidate(
+            kind: switch (index % 3) {
+              0 => 'key',
+              1 => 'text',
+              _ => 'type',
+            },
+            selector: 'signal-$index',
+            score: 12 - index,
+          ),
+      ];
+      final step = CockpitInteractionStep(
+        stepId: 's1',
+        kind: CockpitInteractionStepKind.tap,
+        locatorCandidates: candidates,
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: DateTime.utc(2026, 10, 7, 9, 30),
+      );
+      final decoded = CockpitInteractionStep.fromJson(step.toJson());
+      expect(decoded, step);
+      expect(
+        decoded.locatorCandidates.map((candidate) => candidate.selector),
+        <String>[for (var index = 0; index < 12; index += 1) 'signal-$index'],
+      );
+      // Order is part of equality: the same candidates shuffled differ.
+      final reordered = CockpitInteractionStep(
+        stepId: 's1',
+        kind: CockpitInteractionStepKind.tap,
+        locatorCandidates: candidates.reversed.toList(),
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: DateTime.utc(2026, 10, 7, 9, 30),
+      );
+      expect(reordered == step, isFalse);
     });
 
     test('constructor rejects empty selector and unknown kind', () {
@@ -325,6 +383,133 @@ void main() {
       final twin = CockpitInteractionStep.fromJson(base.toJson());
       expect(twin, base);
       expect(twin.hashCode, base.hashCode);
+    });
+
+    test('emits the exact full key set in template order', () {
+      expect(_fullStep().toJson().keys.toList(), const <String>[
+        'stepId',
+        'kind',
+        'locatorCandidates',
+        'resolvedValue',
+        'scrollDirection',
+        'routeName',
+        'fromRouteName',
+        'positionDx',
+        'positionDy',
+        'phase',
+        'segments',
+        'annotation',
+        'settledAfterMs',
+        'recordedAt',
+      ]);
+    });
+
+    test('fromJson rejects a non-object payload with the path', () {
+      expect(
+        () => CockpitInteractionStep.fromJson('s1', path: r'$.steps[2]'),
+        throwsA(_formatExceptionAt(r'$.steps[2]')),
+      );
+    });
+
+    test('fromJson tolerates unknown extra keys', () {
+      final json = _fullStep().toJson()
+        ..['unknownField'] = 'ignored'
+        ..['nested'] = <String, Object?>{'surprise': 1};
+      final decoded = CockpitInteractionStep.fromJson(json);
+      expect(decoded, _fullStep());
+    });
+
+    test(
+      'fromJson rejects negative settledAfterMs and non-boolean unresolved',
+      () {
+        expect(
+          () => CockpitInteractionStep.fromJson(<String, Object?>{
+            'stepId': 's1',
+            'kind': 'tap',
+            'phase': 'recording',
+            'settledAfterMs': -1,
+            'recordedAt': '2026-10-07T09:30:00.000Z',
+          }),
+          throwsA(_formatExceptionAt(r'$.settledAfterMs')),
+        );
+        expect(
+          () => CockpitInteractionStep.fromJson(<String, Object?>{
+            'stepId': 's1',
+            'kind': 'tap',
+            'phase': 'recording',
+            'unresolved': 'yes',
+            'recordedAt': '2026-10-07T09:30:00.000Z',
+          }),
+          throwsA(_formatExceptionAt(r'$.unresolved')),
+        );
+      },
+    );
+
+    test('fromJson bounds recorded text fields at 4096 characters', () {
+      final base = <String, Object?>{
+        'stepId': 's1',
+        'kind': 'text',
+        'phase': 'recording',
+        'recordedAt': '2026-10-07T09:30:00.000Z',
+      };
+      final atLimit = <String, Object?>{...base, 'resolvedValue': 'x' * 4096};
+      expect(
+        CockpitInteractionStep.fromJson(atLimit).resolvedValue!.length,
+        4096,
+      );
+      expect(
+        () => CockpitInteractionStep.fromJson(<String, Object?>{
+          ...base,
+          'resolvedValue': 'x' * 4097,
+        }),
+        throwsA(_formatExceptionAt(r'$.resolvedValue')),
+      );
+      expect(
+        () => CockpitInteractionStep.fromJson(<String, Object?>{
+          ...base,
+          'annotation': 'x' * 4097,
+        }),
+        throwsA(_formatExceptionAt(r'$.annotation')),
+      );
+    });
+
+    test('accepts empty bounded strings and preserves duplicate segments', () {
+      final json = <String, Object?>{
+        'stepId': 's1',
+        'kind': 'routeChange',
+        'routeName': '',
+        'fromRouteName': '',
+        'phase': 'recording',
+        'segments': <Object?>['', 'setup', 'setup'],
+        'recordedAt': '2026-10-07T09:30:00.000Z',
+      };
+      final decoded = CockpitInteractionStep.fromJson(json);
+      expect(decoded.routeName, '');
+      expect(decoded.fromRouteName, '');
+      // Segments are marks, not identifiers: duplicates pass through.
+      expect(decoded.segments, const <String>['', 'setup', 'setup']);
+      expect(decoded.toJson()['segments'], const <String>[
+        '',
+        'setup',
+        'setup',
+      ]);
+    });
+
+    test('serializes a local recordedAt as its UTC instant', () {
+      final local = DateTime(2026, 10, 7, 11, 30); // Local zone, not UTC.
+      final step = CockpitInteractionStep(
+        stepId: 's1',
+        kind: CockpitInteractionStepKind.tap,
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: local,
+      );
+      expect(step.toJson()['recordedAt'], local.toUtc().toIso8601String());
+      final decoded = CockpitInteractionStep.fromJson(step.toJson());
+      expect(decoded.recordedAt.isUtc, isTrue);
+      expect(decoded.recordedAt.isAtSameMomentAs(local), isTrue);
+      // DateTime equality demands the same zone flag, so the round trip
+      // normalizes local captures to UTC instead of claiming equality.
+      expect(decoded.recordedAt == local, isFalse);
     });
   });
 }
