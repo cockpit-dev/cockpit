@@ -21,19 +21,34 @@ Uri cockpitInteractionRecorderBaseUri(Map<String, Object?>? output) {
       statusMap?['state'] == 'ready' &&
       statusMap?['appReachable'] == true &&
       statusMap?['remoteSessionReachable'] == true;
+  final rawState = statusMap?['state'];
+  final state = rawState is String ? rawState : null;
   if (!ready || baseUrl is! String || baseUrl.isEmpty) {
-    throw CockpitApplicationServiceException(
-      code: 'developmentSessionBridgeUnavailable',
-      message:
-          'The development session has no ready remote bridge; run '
-          '`cockpit dev start` and retry.',
-      details: <String, Object?>{
-        if (statusMap?['state'] is String) 'state': statusMap?['state'],
-      },
-    );
+    throw _bridgeUnavailable(state: state);
   }
-  return Uri.parse(baseUrl);
+  final Uri baseUri;
+  try {
+    baseUri = Uri.parse(baseUrl);
+  } on FormatException {
+    throw _bridgeUnavailable(state: state, baseUrl: baseUrl);
+  }
+  final httpScheme = baseUri.scheme == 'http' || baseUri.scheme == 'https';
+  if (!httpScheme || baseUri.host.isEmpty) {
+    throw _bridgeUnavailable(state: state, baseUrl: baseUrl);
+  }
+  return baseUri;
 }
+
+CockpitApplicationServiceException _bridgeUnavailable({
+  String? state,
+  String? baseUrl,
+}) => CockpitApplicationServiceException(
+  code: 'developmentSessionBridgeUnavailable',
+  message:
+      'The development session has no ready remote bridge; run '
+      '`cockpit dev start` and retry.',
+  details: <String, Object?>{'state': ?state, 'baseUrl': ?baseUrl},
+);
 
 /// Drives the interaction recorder on one resolved live session and returns
 /// printable payload maps shared by every external surface.

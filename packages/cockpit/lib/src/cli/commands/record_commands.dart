@@ -171,7 +171,9 @@ CockpitLeafCommand _export(
     final document = format == 'yaml'
         ? bundle.caseYaml
         : const JsonEncoder.withIndent('  ').convert(bundle.toJson());
-    await File(resolved).writeAsString('$document\n', flush: true);
+    final outFile = File(resolved);
+    await outFile.parent.create(recursive: true);
+    await outFile.writeAsString('$document\n', flush: true);
     await runtime.success(<String, Object?>{
       'format': format,
       'path': resolved,

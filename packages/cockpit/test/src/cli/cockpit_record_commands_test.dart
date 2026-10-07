@@ -192,6 +192,22 @@ void main() {
     },
   );
 
+  test('record export writes into a not-yet-existing directory', () async {
+    final (exitCode, receipt) = await runRecord(const <String>[
+      'export',
+      '--out',
+      'reports/nested/flow.yaml',
+    ]);
+
+    expect(exitCode, cockpitSuccessExitCode);
+    final written = File(
+      p.join(workingDirectory.path, 'reports/nested/flow.yaml'),
+    );
+    expect(receipt['path'], written.path);
+    expect(written.existsSync(), isTrue);
+    expect(written.readAsStringSync(), '${_RecorderAppServer.caseYaml}\n');
+  });
+
   test('record reports an unreachable endpoint as retryable', () async {
     final deadPort = await _reservedThenClosedPort();
     final exitCode = await runner().run(<String>[

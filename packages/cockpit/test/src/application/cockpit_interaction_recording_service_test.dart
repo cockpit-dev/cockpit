@@ -86,6 +86,175 @@ void main() {
     );
   });
 
+  test('recorder base-uri resolution rejects every malformed output shape', () {
+    // A ready status so only the shape under test can flip the verdict.
+    Map<String, Object?> readyStatus({
+      Object? state = 'ready',
+      Object? appReachable = true,
+      Object? remoteSessionReachable = true,
+    }) => <String, Object?>{
+      'state': state,
+      'appReachable': appReachable,
+      'remoteSessionReachable': remoteSessionReachable,
+    };
+    Map<String, Object?> output({
+      Object? status,
+      Object? runtime,
+      Object? bridge,
+      Object? baseUrl,
+    }) => <String, Object?>{
+      'status': ?status,
+      'runtime': ?runtime,
+      if (bridge != null)
+        'runtime': <String, Object?>{'bridge': bridge}
+      else if (baseUrl != null)
+        'runtime': <String, Object?>{
+          'bridge': <String, Object?>{'baseUrl': baseUrl},
+        },
+    };
+
+    Matcher unavailableWith(Map<String, Object?> details) =>
+        isA<CockpitApplicationServiceException>()
+            .having(
+              (error) => error.code,
+              'code',
+              'developmentSessionBridgeUnavailable',
+            )
+            .having((error) => error.details, 'details', details);
+
+    // The status block itself is malformed or reports an unusable session.
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: 'ready', baseUrl: 'http://127.0.0.1:43117'),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: <Object?>[readyStatus()], baseUrl: 'http://127.0.0.1'),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(
+          status: <String, Object?>{
+            'state': 7,
+            'appReachable': true,
+            'remoteSessionReachable': true,
+          },
+          baseUrl: 'http://127.0.0.1:43117',
+        ),
+      ),
+      throwsA(
+        unavailableWith(const <String, Object?>{}),
+      ), // non-string state never leaks into details
+    );
+
+    // Ready-but-unreachable combinations, one flag at a time.
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(
+          status: readyStatus(appReachable: false),
+          baseUrl: 'http://127.0.0.1:43117',
+        ),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(
+          status: readyStatus(remoteSessionReachable: false),
+          baseUrl: 'http://127.0.0.1:43117',
+        ),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+
+    // The runtime/bridge/baseUrl chain is malformed at each link.
+    expect(
+      () => cockpitInteractionRecorderBaseUri(output(status: readyStatus())),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: readyStatus(), runtime: 'flutter'),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: readyStatus(), bridge: 'http://127.0.0.1:43117'),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: readyStatus(), baseUrl: 43117),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+    expect(
+      () => cockpitInteractionRecorderBaseUri(
+        output(status: readyStatus(), baseUrl: <String, Object?>{}),
+      ),
+      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
+    );
+  });
+
+  test(
+    'recorder base-uri resolution reports a malformed bridge URL as unusable',
+    () {
+      // Regression: a bridge base URL that does not parse, or parses to
+      // something that is not an absolute http(s) URL, must surface the
+      // documented developmentSessionBridgeUnavailable failure instead of a
+      // raw FormatException (which the CLI misreports as invalidInput and the
+      // MCP tools as invalidArguments).
+      Matcher unavailableFor(String baseUrl) =>
+          isA<CockpitApplicationServiceException>()
+              .having(
+                (error) => error.code,
+                'code',
+                'developmentSessionBridgeUnavailable',
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                contains('dev start'),
+              )
+              .having(
+                (error) => error.details,
+                'details',
+                containsPair('baseUrl', baseUrl),
+              );
+
+      Map<String, Object?> output(String baseUrl) => <String, Object?>{
+        'status': <String, Object?>{
+          'state': 'ready',
+          'appReachable': true,
+          'remoteSessionReachable': true,
+        },
+        'runtime': <String, Object?>{
+          'bridge': <String, Object?>{'baseUrl': baseUrl},
+        },
+      };
+
+      for (final baseUrl in const <String>[
+        'http://[::1', // Uri.parse itself fails.
+        ':::', // Uri.parse itself fails.
+        '127.0.0.1:43117', // Parses to a scheme-less relative URI.
+        '/bridge/127.0.0.1:43117', // Parses to a path-only URI.
+        'ftp://127.0.0.1:43117', // Parses, but not an http(s) bridge.
+      ]) {
+        expect(
+          () => cockpitInteractionRecorderBaseUri(output(baseUrl)),
+          throwsA(unavailableFor(baseUrl)),
+          reason: baseUrl,
+        );
+      }
+    },
+  );
+
   test(
     'interaction recording service drives a live recorder endpoint',
     () async {
