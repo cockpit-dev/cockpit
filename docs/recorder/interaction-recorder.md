@@ -173,8 +173,9 @@ Consequences (all structural, not checks):
    final controller value plus the field's locator candidates are recorded
    as one `text` step. Empty values are skipped.
 5. **Route changes.** The binding's existing `currentRouteName`
-   `ValueNotifier` emits `routeChange` steps; system back via `maybePop`
-   observation on the same observer (`back` kind).
+   `ValueNotifier` emits `routeChange` steps (any route-name diff). `back`
+   is a contract-level kind reserved for richer observers; capture v1
+   classifies every route diff as `routeChange`.
 6. **Settle marking.** After each action step, a short scheduler-quiet
    watch (reusing `waitForCockpitSchedulerQuiet` semantics, non-blocking,
    test-clock injectable) fills `settledAfterMs`. Steps are appended
@@ -184,10 +185,15 @@ Consequences (all structural, not checks):
 
 `CockpitInteractionRecorder` (`ChangeNotifier`): owns the phase machine,
 step list, and segment stack. Commands: `start(request)`, `pause()`,
-`resume()`, `stop()`, `markSegment(label)`, `annotate(stepId, note)`,
-`discardLastStep()`, `export()`, `verifyReplay()`. Pause suppresses capture
-but keeps subscriptions warm. Only one interaction recording session exists
-at a time per binding; `start` while active throws `StateError`.
+`resume()`, `stop()`, `beginSegment(label)`, `endSegment()`,
+`annotate(stepId, note)`, `discardLastStep()`, `export()`,
+`verifyReplay()`. Segments are a stack: steps snapshot the currently open
+segment labels; a segment named `setup` delimits the exported setup block.
+Pause suppresses capture but keeps subscriptions warm. Only one interaction
+recording session exists at a time per binding; `start` while active throws
+`StateError`. `export()` and `verifyReplay()` are added with their
+implementations (converter / replay phases) — the engine never carries
+stubs.
 
 Integration: `FlutterCockpitConfig` gains a `recorder` block
 (`enabled`, `host: floatingBall | guest | headless`, defaults for capture
