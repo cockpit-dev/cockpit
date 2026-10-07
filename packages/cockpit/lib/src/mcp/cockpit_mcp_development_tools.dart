@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
+import '../application/cockpit_interaction_recording_service.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
 import 'cockpit_mcp_api_tool.dart';
+import 'cockpit_mcp_error.dart';
 import 'cockpit_mcp_tool.dart';
 
 List<CockpitMcpTool> cockpitMcpDevelopmentTools(
@@ -14,6 +16,7 @@ List<CockpitMcpTool> cockpitMcpDevelopmentTools(
   ..._qualityTools(client),
   ..._dependencyTools(client),
   ..._projectTools(client),
+  ..._recorderTools(client),
 ];
 
 List<CockpitMcpTool> _qualityTools(
@@ -390,6 +393,148 @@ List<CockpitMcpTool> _projectTools(
     longRunning: true,
   ),
 ];
+
+List<CockpitMcpTool> _recorderTools(CockpitMcpClientProvider client) {
+  CockpitMcpApiTool recorderTool({
+    required String name,
+    required String description,
+    required bool readOnly,
+    Map<String, Object?> properties = const <String, Object?>{},
+    Set<String> inputKeys = const <String>{},
+    required Future<Map<String, Object?>> Function(
+      CockpitInteractionRecordingService service,
+      Map<String, Object?> arguments,
+    )
+    run,
+  }) => CockpitMcpApiTool(
+    client: client,
+    name: name,
+    description: description,
+    featureCategories: const <CockpitMcpFeatureCategory>[
+      CockpitMcpFeatureCategory.e2e,
+      CockpitMcpFeatureCategory.sessionManagement,
+    ],
+    isEnabledByDefault: false,
+    toolAnnotations: CockpitMcpToolAnnotations(
+      readOnly: readOnly,
+      destructive: false,
+      idempotent: readOnly,
+      longRunning: false,
+      requiresSession: false,
+      producesBundleEvidence: false,
+    ),
+    inputSchema: _schema(
+      properties: <String, Object?>{
+        'workspaceId': _string(),
+        'sessionId': _string(),
+        ...properties,
+      },
+      required: const <String>['workspaceId', 'sessionId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, <String>{'workspaceId', 'sessionId', ...inputKeys});
+      final service = await _recordingService(
+        api,
+        workspaceId: _requiredString(arguments, 'workspaceId'),
+        sessionId: _requiredString(arguments, 'sessionId'),
+      );
+      return run(service, arguments);
+    },
+  );
+
+  return <CockpitMcpTool>[
+    recorderTool(
+      name: 'recorder_start',
+      description:
+          'Start recording in-app interactions on a live development session.',
+      readOnly: false,
+      properties: <String, Object?>{'name': _string()},
+      inputKeys: const <String>{'name'},
+      run: (service, arguments) =>
+          service.start(name: _optionalString(arguments, 'name')),
+    ),
+    recorderTool(
+      name: 'recorder_pause',
+      description: 'Pause the active interaction recording.',
+      readOnly: false,
+      run: (service, _) => service.pause(),
+    ),
+    recorderTool(
+      name: 'recorder_resume',
+      description: 'Resume the paused interaction recording.',
+      readOnly: false,
+      run: (service, _) => service.resume(),
+    ),
+    recorderTool(
+      name: 'recorder_stop',
+      description:
+          'Stop the interaction recording and return the recorded result.',
+      readOnly: false,
+      run: (service, _) => service.stop(),
+    ),
+    recorderTool(
+      name: 'recorder_status',
+      description:
+          'Read the interaction recording session of a live development '
+          'session, or idle.',
+      readOnly: true,
+      run: (service, _) => service.status(),
+    ),
+    recorderTool(
+      name: 'recorder_steps',
+      description: 'Read the recorded interaction steps after a cursor.',
+      readOnly: true,
+      properties: <String, Object?>{
+        'after': _integer(minimum: 0, maximum: 1000000),
+      },
+      inputKeys: const <String>{'after'},
+      run: (service, arguments) async {
+        final after = _optionalInt(arguments, 'after') ?? 0;
+        return service.steps(after: after);
+      },
+    ),
+    recorderTool(
+      name: 'recorder_export',
+      description:
+          'Export the recording of a live development session as case YAML '
+          'returned in the response.',
+      readOnly: false,
+      run: (service, _) async => service.exportDocument(await service.export()),
+    ),
+  ];
+}
+
+/// Resolves the recorder endpoint of a development session through the
+/// supervisor, sharing the CLI's bridge discovery (`session.development.get`).
+Future<CockpitInteractionRecordingService> _recordingService(
+  CockpitSupervisorApiClient api, {
+  required String workspaceId,
+  required String sessionId,
+}) async {
+  final result = await api.executeOperation(
+    CockpitOperationInvocation(
+      kind: 'session.development.get',
+      workspaceId: workspaceId,
+      input: <String, Object?>{'sessionId': sessionId},
+      deadline: DateTime.now().toUtc().add(const Duration(seconds: 30)),
+    ),
+  );
+  final succeeded =
+      result.lifecycle == CockpitOperationLifecycle.completed &&
+      result.outcome == CockpitOperationOutcome.succeeded;
+  if (!succeeded) {
+    final failure = result.failure;
+    throw CockpitMcpError.internal(
+      failure == null
+          ? 'Development session $sessionId could not be queried.'
+          : 'Development session $sessionId could not be queried: '
+                '${failure.primary.code} ${failure.primary.message}',
+    );
+  }
+  return CockpitInteractionRecordingService.forBaseUri(
+    cockpitInteractionRecorderBaseUri(result.output),
+  );
+}
 
 CockpitMcpApiTool _operationTool({
   required CockpitMcpClientProvider client,

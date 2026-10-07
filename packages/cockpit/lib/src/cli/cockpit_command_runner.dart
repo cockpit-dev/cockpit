@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
+import '../application/cockpit_application_service_exception.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_version.dart';
 import '../supervisor/cockpit_daemon_client.dart';
@@ -12,6 +13,7 @@ import 'cockpit_update_service.dart';
 import 'commands/daemon_commands.dart';
 import 'commands/dev_commands.dart';
 import 'commands/explain_command.dart';
+import 'commands/record_commands.dart';
 import 'commands/resource_commands.dart';
 import 'commands/session_commands.dart';
 import 'commands/skill_command.dart';
@@ -47,6 +49,7 @@ final class CockpitCommandRunner {
       ..addCommand(cockpitUpdateCommand(this.runtime, service: updateService))
       ..addCommand(CockpitDaemonCommand(this.runtime))
       ..addCommand(CockpitDevCommand(this.runtime))
+      ..addCommand(CockpitRecordCommand(this.runtime))
       ..addCommand(cockpitExplainCommand(this.runtime))
       ..addCommand(CockpitOpCommand(this.runtime))
       ..addCommand(CockpitSessionCommand(this.runtime))
@@ -118,6 +121,17 @@ final class CockpitCommandRunner {
       case CockpitDaemonException _:
         runtime.error(code: error.code, message: error.message);
         return cockpitUnavailableExitCode;
+      case CockpitApplicationServiceException _:
+        final temporary =
+            error.code == 'remoteUnavailable' ||
+            error.code == 'developmentSessionBridgeUnavailable';
+        runtime.error(
+          code: error.code,
+          message: error.message,
+          retryable: temporary,
+          details: error.details,
+        );
+        return temporary ? cockpitTemporaryExitCode : cockpitDataExitCode;
       case CockpitCliTimeoutException _:
         runtime.error(
           code: 'timeout',

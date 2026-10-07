@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../application/cockpit_application_service_exception.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
 import 'cockpit_mcp_error.dart';
@@ -80,6 +81,11 @@ final class CockpitMcpApiTool extends CockpitMcpTool {
           'apiCode': error.code,
           if (error.apiError != null) 'apiError': error.apiError!.toJson(),
         },
+      );
+    } on CockpitApplicationServiceException catch (error) {
+      throw CockpitMcpError.internal(
+        error.message,
+        details: <String, Object?>{'apiCode': error.code, ...error.details},
       );
     } on FormatException catch (error) {
       throw CockpitMcpError.invalidArguments(error.message);
