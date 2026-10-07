@@ -112,6 +112,9 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   List<CockpitInteractionStep> get steps =>
       List<CockpitInteractionStep>.unmodifiable(_steps);
 
+  /// The currently open segment labels, stack order (bottom first).
+  List<String> get openSegments => List<String>.unmodifiable(_segments);
+
   /// A fresh [CockpitInteractionRecordingSession] view of the engine state
   /// with recomputed `stepCount` and `unresolvedCount`.
   ///
@@ -246,7 +249,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
         'recorder.',
       );
     }
-    if (!_steps.any(_isActionable)) {
+    if (!_steps.any(isActionable)) {
       throw StateError(
         'Cannot verify a replay: the session has no actionable step.',
       );
@@ -267,7 +270,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     CockpitInteractionStep step,
     CockpitTargetRegistry registry,
   ) async {
-    if (!_isActionable(step)) {
+    if (!isActionable(step)) {
       return CockpitReplayReport(
         stepId: step.stepId,
         kind: step.kind,
@@ -381,7 +384,12 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     );
   }
 
-  static bool _isActionable(CockpitInteractionStep step) {
+  /// Whether [step] is replayable in-process: an actionable kind (`tap`,
+  /// `longPress`, `scroll`, `text`) that resolved to at least one locator
+  /// candidate. Everything else — non-actionable kinds and unresolved noise —
+  /// reports `skipped` during [verifyReplay]. Public so the panel can derive
+  /// its replay affordance from the same rule the engine enforces.
+  static bool isActionable(CockpitInteractionStep step) {
     if (step.unresolved) {
       return false;
     }

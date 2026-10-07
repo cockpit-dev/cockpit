@@ -32,7 +32,11 @@ import '../recording/cockpit_recording_result.dart';
 import '../recording/cockpit_recording_session.dart';
 import '../recorder/cockpit_interaction_capture.dart';
 import '../recorder/cockpit_interaction_recorder.dart';
+import '../recorder/ui/cockpit_recorder_controller.dart';
+import '../recorder/ui/cockpit_recorder_host.dart';
+import '../recorder/ui/cockpit_recorder_scope.dart';
 import 'flutter_cockpit.dart';
+import 'flutter_cockpit_recorder_config.dart';
 import 'cockpit_derived_app_state.dart';
 import 'cockpit_tap_feedback_overlay.dart';
 import 'cockpit_capabilities.dart';
@@ -110,6 +114,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   Future<void>? _remoteSessionStartFuture;
   CockpitTapFeedbackController? _tapFeedbackController;
   CockpitInteractionRecorder? _interactionRecorder;
+  CockpitRecorderController? _recorderController;
   final Map<RouteInformationProvider, VoidCallback> _routeInformationUnbinders =
       <RouteInformationProvider, VoidCallback>{};
   bool _routeInformationDiscoveryScheduled = false;
@@ -562,6 +567,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     unawaited(_nativeSemantics.disable().catchError((_) {}));
     _semanticsHandle?.dispose();
     _tapFeedbackController?.dispose();
+    _recorderController?.dispose();
+    _recorderController = null;
     _interactionRecorder?.dispose();
     _interactionRecorder = null;
     super.dispose();
@@ -572,6 +579,11 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   /// the recorder HUD host, which a later phase adds beside the capture
   /// subtree.
   CockpitInteractionRecorder? get interactionRecorder => _interactionRecorder;
+
+  /// The panel-facing controller over [interactionRecorder], or `null` when
+  /// the recorder is disabled. Provided to widget subtrees through
+  /// [CockpitRecorderScope].
+  CockpitRecorderController? get recorderController => _recorderController;
 
   @override
   Widget build(BuildContext context) {
@@ -604,10 +616,24 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
                 child: surface,
               );
         final tapFeedbackController = _tapFeedbackController;
-        if (tapFeedbackController == null && interactionRecorder == null) {
+        final recorderController = _recorderController;
+        final recorderConfiguration = binding.configuration.recorder;
+        // Host modes guest and headless mount no HUD: apps embed
+        // CockpitRecorderPanel themselves or drive the recorder through
+        // commands only, while the scope below still provides the
+        // controller.
+        final recorderHost =
+            recorderController != null &&
+                recorderConfiguration.host ==
+                    CockpitRecorderHostMode.floatingBall
+            ? CockpitRecorderHost(controller: recorderController)
+            : null;
+        if (tapFeedbackController == null &&
+            interactionRecorder == null &&
+            recorderHost == null) {
           return observedSurface;
         }
-        return Stack(
+        Widget content = Stack(
           // Non-directional alignment: the root sits above the app's
           // MaterialApp, so no Directionality ancestor exists here, and all
           // children fill the stack anyway.
@@ -621,7 +647,17 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
                   controller: tapFeedbackController,
                 ),
               ),
+            if (recorderHost != null) Positioned.fill(child: recorderHost),
           ],
+        );
+        // The scope wraps the whole Stack so both the app (an embedded panel
+        // needs the controller) and the HUD host resolve the same scope.
+        if (recorderController == null) {
+          return content;
+        }
+        return CockpitRecorderScope(
+          controller: recorderController,
+          child: content,
         );
       },
       child: widget.child,
@@ -635,16 +671,23 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     final shouldEnable =
         FlutterCockpit.binding.configuration.recorder.enabled && !kReleaseMode;
     if (shouldEnable) {
-      _interactionRecorder ??= CockpitInteractionRecorder(
-        registry: FlutterCockpit.binding.registry,
-        // Replay settles through the root's idle wait (network-aware)
-        // rather than the recorder's scheduler-only default.
-        waitForIdle:
-            ({required Duration quietWindow, required Duration timeout}) =>
-                waitForUiIdle(quietWindow: quietWindow, timeout: timeout),
-      );
+      if (_interactionRecorder == null) {
+        _interactionRecorder = CockpitInteractionRecorder(
+          registry: FlutterCockpit.binding.registry,
+          // Replay settles through the root's idle wait (network-aware)
+          // rather than the recorder's scheduler-only default.
+          waitForIdle:
+              ({required Duration quietWindow, required Duration timeout}) =>
+                  waitForUiIdle(quietWindow: quietWindow, timeout: timeout),
+        );
+        _recorderController = CockpitRecorderController(
+          recorder: _interactionRecorder!,
+        );
+      }
       return;
     }
+    _recorderController?.dispose();
+    _recorderController = null;
     _interactionRecorder?.dispose();
     _interactionRecorder = null;
   }
