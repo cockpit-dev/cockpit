@@ -19,6 +19,9 @@ Widget buildCockpitDemoDevelopmentApp() {
   const enableTapFeedback = bool.fromEnvironment(
     'FLUTTER_COCKPIT_ENABLE_TAP_FEEDBACK',
   );
+  const enableInteractionRecorder = bool.fromEnvironment(
+    'FLUTTER_COCKPIT_ENABLE_INTERACTION_RECORDER',
+  );
   const enableHttpNetworkObserver = bool.fromEnvironment(
     'FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER',
     defaultValue: true,
@@ -31,6 +34,7 @@ Widget buildCockpitDemoDevelopmentApp() {
   TodoAppService? service;
   final configuration = FlutterCockpitConfiguration(
     initialRouteName: '/inbox',
+    recorder: FlutterCockpitRecorderConfig(enabled: enableInteractionRecorder),
     httpNetworkObserver: !enableHttpNetworkObserver
         ? null
         : CockpitHttpNetworkObserverConfiguration(maxRetainedEntries: 80),
