@@ -53,11 +53,18 @@ CockpitTestTemplateValue? _string(String? value) => value == null
 ///   are all unrepresentable is dropped like unresolved noise. For `text`
 ///   steps the final value becomes the action's `text` argument.
 /// - `scroll` maps to `scrollUntilVisible` because that is the only scroll
-///   action whose required arguments (`locator` + `direction`) are exactly
-///   what the recorder captured — `swipe` would require inventing a
-///   distance. A `scroll` step immediately before a `tap` stays a separate
-///   step: folding the pair is over-optimization when both steps already
-///   replay correctly on their own.
+///   action that replays "scroll as far as it takes" without inventing a
+///   distance. Its locator is *borrowed*: a scroll exists in a flow to
+///   bring the next thing into view, so it targets the primary locator of
+///   the next locator-bearing action (`tap`/`longPress`/`text`), falling
+///   back to the scroll's own grab-point locator only when nothing
+///   follows — the grab point was already visible, so targeting it would
+///   make the step a no-op. A `routeChange`/`back` boundary resets the
+///   borrowing: scrolling toward a target on another screen is nonsense.
+///   Borrowing also keeps `unresolved` scrolls alive when a target follows
+///   (the finger often lands on unregistered list content); a trailing
+///   scroll with no locator of its own is dropped. A `scroll` immediately
+///   before its target stays a separate step: the pair is the flow.
 /// - `routeChange` maps to a `waitFor` action with a `route` condition —
 ///   the document has no dedicated `waitForRoute` kind; the route condition
 ///   on `waitFor` is the waiting mechanism. `back` maps to the `back`
@@ -140,13 +147,64 @@ final class CockpitRecordedFlowConverter {
   }
 
   List<_ExportableStep> _exportableSteps(List<CockpitInteractionStep> steps) {
-    return <_ExportableStep>[for (final step in steps) ?_exportableEntry(step)];
+    final entries = <_ExportableStep>[
+      for (final step in steps) ?_exportableEntry(step),
+    ].whereType<_ExportableStep>().toList(growable: false);
+    return _borrowScrollLocators(entries)
+        .where(
+          // A scroll that found neither a borrow target nor a representable
+          // locator of its own cannot replay, exactly like a locator-less
+          // tap.
+          (entry) =>
+              entry.step.kind != CockpitInteractionStepKind.scroll ||
+              entry.locator != null,
+        )
+        .toList(growable: false);
+  }
+
+  /// Re-targets every scroll entry at the primary locator of the next
+  /// locator-bearing action. Walks backwards, so each scroll sees what
+  /// follows it; a route boundary clears the loan because scrolling toward
+  /// another screen's target is meaningless. Borrowed locators share the
+  /// lender's template instance, which [_weakAssertion] uses to skip the
+  /// wait the scroll itself already guarantees.
+  List<_ExportableStep> _borrowScrollLocators(
+    List<_ExportableStep> entries,
+  ) {
+    final upcomingLocator = <int, CockpitTestLocatorTemplate>{};
+    CockpitTestLocatorTemplate? nextActionLocator;
+    for (var index = entries.length - 1; index >= 0; index -= 1) {
+      final entry = entries[index];
+      switch (entry.step.kind) {
+        case CockpitInteractionStepKind.routeChange ||
+              CockpitInteractionStepKind.back:
+          nextActionLocator = null;
+        case CockpitInteractionStepKind.scroll:
+          if (nextActionLocator != null) {
+            upcomingLocator[index] = nextActionLocator;
+          }
+        default:
+          // Only locator-bearing actions reach here; they always carry one.
+          nextActionLocator = entry.locator;
+      }
+    }
+    if (upcomingLocator.isEmpty) {
+      return entries;
+    }
+    final retargeted = <_ExportableStep>[];
+    for (var index = 0; index < entries.length; index += 1) {
+      final entry = entries[index];
+      final borrowed = upcomingLocator[index];
+      retargeted.add(
+        borrowed == null
+            ? entry
+            : _ExportableStep(entry.step, borrowed, isSetup: entry.isSetup),
+      );
+    }
+    return retargeted;
   }
 
   _ExportableStep? _exportableEntry(CockpitInteractionStep step) {
-    if (step.unresolved) {
-      return null;
-    }
     final isSetup = step.segments.contains('setup');
     switch (step.kind) {
       case CockpitInteractionStepKind.marker || CockpitInteractionStepKind.note:
@@ -167,24 +225,32 @@ final class CockpitRecordedFlowConverter {
         if (value == null || value.isEmpty) {
           return null;
         }
+        if (step.unresolved) {
+          return null;
+        }
         return _ExportableStep(
           step,
           _locator(step.locatorCandidates),
           isSetup: isSetup,
         );
       case CockpitInteractionStepKind.scroll:
-        final direction = step.scrollDirection;
-        if (direction == null) {
+        // Direction is the one argument a scroll cannot replay without.
+        // The locator is decided later by [_borrowScrollLocators]; an
+        // unresolved scroll stays in the running because its finger often
+        // lands on unregistered list content while a real target follows.
+        if (step.scrollDirection == null) {
           return null;
         }
-        final locator = _locator(step.locatorCandidates);
-        // tap/longPress/scroll all require a locator at the action level;
-        // without a representable one the step cannot replay.
-        return locator == null
-            ? null
-            : _ExportableStep(step, locator, isSetup: isSetup);
+        return _ExportableStep(
+          step,
+          _locator(step.locatorCandidates),
+          isSetup: isSetup,
+        );
       case CockpitInteractionStepKind.tap ||
           CockpitInteractionStepKind.longPress:
+        if (step.unresolved) {
+          return null;
+        }
         final locator = _locator(step.locatorCandidates);
         return locator == null
             ? null
@@ -244,6 +310,14 @@ final class CockpitRecordedFlowConverter {
   }) {
     if (current.step.kind == CockpitInteractionStepKind.routeChange) {
       // The route wait is the step itself.
+      return null;
+    }
+    if (current.step.kind == CockpitInteractionStepKind.scroll &&
+        next != null &&
+        identical(current.locator, next.locator)) {
+      // A scroll re-targeted at the next action's locator already waits
+      // for that locator to become visible; an explicit wait after it
+      // would restate the same condition.
       return null;
     }
     CockpitTestLocatorTemplate? target;

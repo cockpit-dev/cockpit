@@ -245,6 +245,157 @@ void main() {
       expect(action.values[CockpitTestActionField.direction]!.value, 'up');
     });
 
+    test(
+      'scroll borrows the next action locator, not its grab point',
+      () {
+        final testCase = convert(<CockpitInteractionStep>[
+          _step(
+            's1',
+            CockpitInteractionStepKind.scroll,
+            direction: CockpitInteractionScrollDirection.up,
+            candidates: <CockpitLocatorCandidate>[
+              _candidate('key', const CockpitLocator(key: 'item-9'), 4),
+            ],
+          ),
+          _step(
+            's2',
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[
+              _candidate('key', const CockpitLocator(key: 'buy-now'), 4),
+            ],
+          ),
+        ]);
+
+        // The scroll exists to bring the tap's target into view; targeting
+        // the grabbed item (already visible) would replay as a no-op.
+        // No wait is injected between the scroll and the tap: the scroll
+        // itself is the wait for that locator.
+        final actions = testCase.steps.map(_action).toList();
+        expect(actions, hasLength(3));
+        expect(actions[0].kind, CockpitTestActionKind.scrollUntilVisible);
+        expect(actions[0].locator!.testId!.value, 'buy-now');
+        expect(
+          actions[0].values[CockpitTestActionField.direction]!.value,
+          'up',
+        );
+        expect(actions[1].kind, CockpitTestActionKind.tap);
+        expect(actions[1].locator!.testId!.value, 'buy-now');
+        expect(actions[2].kind, CockpitTestActionKind.waitFor);
+      },
+    );
+
+    test('an unresolved scroll survives when a target follows it', () {
+      final testCase = convert(<CockpitInteractionStep>[
+        _step(
+          's1',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          unresolved: true,
+        ),
+        _step(
+          's2',
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'buy-now'), 4),
+          ],
+        ),
+      ]);
+
+      // The finger usually lands on unregistered list content; the flow
+      // still needs the scroll, retargeted at what it was finding.
+      final actions = testCase.steps.map(_action).toList();
+      expect(actions, hasLength(3));
+      expect(actions[0].kind, CockpitTestActionKind.scrollUntilVisible);
+      expect(actions[0].locator!.testId!.value, 'buy-now');
+      expect(actions[1].kind, CockpitTestActionKind.tap);
+    });
+
+    test('a route boundary stops the borrowing', () {
+      final testCase = convert(<CockpitInteractionStep>[
+        _step(
+          's1',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'item-9'), 4),
+          ],
+        ),
+        _step(
+          's2',
+          CockpitInteractionStepKind.routeChange,
+          routeName: '/details',
+          fromRouteName: '/',
+        ),
+        _step(
+          's3',
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'back-arrow'), 4),
+          ],
+        ),
+      ]);
+
+      // Scrolling toward a target that lives on another screen is
+      // nonsense: the scroll keeps its own grab-point locator.
+      final actions = testCase.steps.map(_action).toList();
+      expect(actions.first.kind, CockpitTestActionKind.scrollUntilVisible);
+      expect(actions.first.locator!.testId!.value, 'item-9');
+    });
+
+    test('a trailing unresolved scroll is dropped', () {
+      final testCase = convert(<CockpitInteractionStep>[
+        _step(
+          's1',
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'open'), 4),
+          ],
+        ),
+        _step(
+          's2',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          unresolved: true,
+        ),
+      ]);
+
+      final actions = testCase.steps.map(_action).toList();
+      expect(actions.first.kind, CockpitTestActionKind.tap);
+      expect(actions.where((action) => action.kind == CockpitTestActionKind.scrollUntilVisible), isEmpty);
+    });
+
+    test('consecutive scrolls retarget at the same following target', () {
+      final testCase = convert(<CockpitInteractionStep>[
+        _step(
+          's1',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          unresolved: true,
+        ),
+        _step(
+          's2',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          unresolved: true,
+        ),
+        _step(
+          's3',
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'buy-now'), 4),
+          ],
+        ),
+      ]);
+
+      final actions = testCase.steps.map(_action).toList();
+      expect(actions, hasLength(4));
+      for (final action in actions.take(2)) {
+        expect(action.kind, CockpitTestActionKind.scrollUntilVisible);
+        expect(action.locator!.testId!.value, 'buy-now');
+      }
+      expect(actions[2].kind, CockpitTestActionKind.tap);
+    });
+
     test('routeChange maps to a waitFor route condition and back to back', () {
       final testCase = convert(<CockpitInteractionStep>[
         _step(

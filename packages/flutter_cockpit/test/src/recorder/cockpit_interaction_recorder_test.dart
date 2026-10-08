@@ -499,23 +499,26 @@ void main() {
   });
 
   group('isActionable', () {
-    test('only actionable kinds with locator candidates replay', () {
+    test('only actionable kinds with the data a replay needs', () {
       CockpitInteractionStep step(
         CockpitInteractionStepKind kind, {
         bool unresolved = false,
+        CockpitInteractionScrollDirection? direction,
       }) => CockpitInteractionStep(
         stepId: 's1',
         kind: kind,
         unresolved: unresolved,
+        scrollDirection: direction,
         phase: CockpitRecorderPhase.recording,
         recordedAt: DateTime.utc(2026, 10, 7, 9),
       );
 
       for (final kind in CockpitInteractionStepKind.values) {
+        // A bare step carries no scroll direction, so even scroll reads as
+        // not actionable here; the direction cases follow below.
         final actionable =
             kind == CockpitInteractionStepKind.tap ||
             kind == CockpitInteractionStepKind.longPress ||
-            kind == CockpitInteractionStepKind.scroll ||
             kind == CockpitInteractionStepKind.text;
         expect(
           CockpitInteractionRecorder.isActionable(step(kind)),
@@ -529,6 +532,27 @@ void main() {
           reason: '${kind.name} unresolved',
         );
       }
+
+      // A scroll replays through its direction alone — even unresolved and
+      // without candidates, its target is borrowed from the next step and
+      // the swipe can run from the recorded grab position.
+      expect(
+        CockpitInteractionRecorder.isActionable(
+          step(
+            CockpitInteractionStepKind.scroll,
+            unresolved: true,
+            direction: CockpitInteractionScrollDirection.up,
+          ),
+        ),
+        isTrue,
+      );
+      // Without a direction there is nothing to replay.
+      expect(
+        CockpitInteractionRecorder.isActionable(
+          step(CockpitInteractionStepKind.scroll),
+        ),
+        isFalse,
+      );
     });
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:ui' show Offset;
+
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show AxisDirection;
@@ -59,6 +61,12 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
 
   static const Duration _replayQuietWindow = Duration(milliseconds: 300);
   static const Duration _replaySettleTimeout = Duration(seconds: 5);
+
+  /// Upper bound on goal-directed scroll swipes before a step reports
+  /// deviation: each swipe travels roughly a viewport, so six covers about
+  /// five screens of travel — beyond that the flow is not about scrolling
+  /// anymore.
+  static const int _maxScrollReplayAttempts = 6;
 
   final DateTime Function() _now;
   final CockpitTargetRegistry? _registry;
@@ -257,19 +265,60 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     _replaying = true;
     notifyListeners();
     try {
-      return <CockpitReplayReport>[
-        for (final step in _steps) await _replayStep(step, registry),
-      ];
+      final reports = <CockpitReplayReport>[];
+      for (var index = 0; index < _steps.length; index += 1) {
+        final step = _steps[index];
+        reports.add(
+          await _replayStep(
+            step,
+            registry,
+            scrollToward: step.kind == CockpitInteractionStepKind.scroll
+                ? _scrollToward(index)
+                : null,
+          ),
+        );
+      }
+      return reports;
     } finally {
       _replaying = false;
       notifyListeners();
     }
   }
 
+  /// What a scroll step at [index] exists to reveal: the first resolved
+  /// candidate-bearing action after it, mirroring the converter's
+  /// scroll-target borrowing so in-process verification and the exported
+  /// case replay one flow. Route boundaries end the search — scrolling
+  /// toward a target on another screen is meaningless — and trailing
+  /// scrolls find nothing, replaying as a single swipe on their own
+  /// candidate.
+  CockpitInteractionStep? _scrollToward(int index) {
+    for (var next = index + 1; next < _steps.length; next += 1) {
+      final step = _steps[next];
+      switch (step.kind) {
+        case CockpitInteractionStepKind.routeChange ||
+            CockpitInteractionStepKind.back:
+          return null;
+        case CockpitInteractionStepKind.tap ||
+            CockpitInteractionStepKind.longPress ||
+            CockpitInteractionStepKind.text:
+          return step.unresolved || step.locatorCandidates.isEmpty
+              ? null
+              : step;
+        case CockpitInteractionStepKind.scroll ||
+            CockpitInteractionStepKind.marker ||
+            CockpitInteractionStepKind.note:
+          continue;
+      }
+    }
+    return null;
+  }
+
   Future<CockpitReplayReport> _replayStep(
     CockpitInteractionStep step,
-    CockpitTargetRegistry registry,
-  ) async {
+    CockpitTargetRegistry registry, {
+    CockpitInteractionStep? scrollToward,
+  }) async {
     if (!isActionable(step)) {
       return CockpitReplayReport(
         stepId: step.stepId,
@@ -278,17 +327,23 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
         reason: 'Kind ${step.kind.name} is not replayable in-process.',
       );
     }
-    CockpitTarget? target;
-    for (final candidate in step.locatorCandidates) {
-      final resolution = registry.resolve(
-        CockpitSelector.parse(candidate.selector),
-        requiredCommand: _commandForStep(step),
-      );
-      if (resolution.isSuccess) {
-        target = resolution.target;
-        break;
+    if (step.kind == CockpitInteractionStepKind.scroll) {
+      if (scrollToward != null) {
+        return _replayScrollUntilVisible(step, registry, toward: scrollToward);
+      }
+      if (step.locatorCandidates.isEmpty) {
+        // A trailing scroll with no locator of its own: the converter
+        // drops it from the exported case, so in-process verification
+        // skips it instead of deviating on a step that never replays.
+        return CockpitReplayReport(
+          stepId: step.stepId,
+          kind: step.kind,
+          status: CockpitReplayStatus.skipped,
+          reason: 'Trailing scroll without a locator candidate.',
+        );
       }
     }
+    final target = _resolveCandidate(step, registry);
     if (target == null) {
       return CockpitReplayReport(
         stepId: step.stepId,
@@ -301,10 +356,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     }
     try {
       await _performStep(step, target);
-      await (_waitForIdle ?? _defaultWaitForIdle)(
-        quietWindow: _replayQuietWindow,
-        timeout: _replaySettleTimeout,
-      );
+      await _replaySettle();
       return CockpitReplayReport(
         stepId: step.stepId,
         kind: step.kind,
@@ -320,6 +372,95 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     }
   }
 
+  /// The scroll's goal-directed replay: swipe the recorded direction until
+  /// the step it existed to reveal resolves against the live registry —
+  /// the in-process mirror of the exported `scrollUntilVisible`. Each
+  /// swipe prefers the scroll's own grab-point candidate; without one it
+  /// falls back to the recorded grab coordinates (the gesture engine
+  /// resolves a target-less swipe against the viewport), which is exactly
+  /// where the user's finger pulled the list.
+  Future<CockpitReplayReport> _replayScrollUntilVisible(
+    CockpitInteractionStep step,
+    CockpitTargetRegistry registry, {
+    required CockpitInteractionStep toward,
+  }) async {
+    for (var attempt = 0; attempt < _maxScrollReplayAttempts; attempt += 1) {
+      if (_resolveCandidate(toward, registry) != null) {
+        return CockpitReplayReport(
+          stepId: step.stepId,
+          kind: step.kind,
+          status: CockpitReplayStatus.passed,
+        );
+      }
+      try {
+        await _scrollOnce(step, registry);
+        await _replaySettle();
+      } on Object catch (error) {
+        return CockpitReplayReport(
+          stepId: step.stepId,
+          kind: step.kind,
+          status: CockpitReplayStatus.deviated,
+          reason: 'Scroll action failed: $error',
+        );
+      }
+    }
+    return CockpitReplayReport(
+      stepId: step.stepId,
+      kind: step.kind,
+      status: CockpitReplayStatus.deviated,
+      reason:
+          'Scrolled $_maxScrollReplayAttempts times without bringing the '
+          'next step into the registry (tried '
+          '${toward.locatorCandidates.map((c) => c.selector).join(', ')}).',
+    );
+  }
+
+  /// One recorded-direction swipe: on the scroll's own resolved candidate
+  /// when it has one, otherwise from the recorded grab position.
+  Future<void> _scrollOnce(
+    CockpitInteractionStep step,
+    CockpitTargetRegistry registry,
+  ) {
+    final direction = _axisDirection(step.scrollDirection!);
+    final target = _resolveCandidate(step, registry);
+    final grab =
+        target == null && step.positionDx != null && step.positionDy != null
+        ? Offset(step.positionDx!, step.positionDy!)
+        : null;
+    return _performGesture(
+      CockpitGestureAction.swipe(
+        target: target,
+        origin: grab,
+        direction: direction,
+      ),
+    );
+  }
+
+  Future<void> _replaySettle() {
+    return (_waitForIdle ?? _defaultWaitForIdle)(
+      quietWindow: _replayQuietWindow,
+      timeout: _replaySettleTimeout,
+    );
+  }
+
+  /// Resolves the first candidate of [step] that the live registry can
+  /// serve the step's command from.
+  CockpitTarget? _resolveCandidate(
+    CockpitInteractionStep step,
+    CockpitTargetRegistry registry,
+  ) {
+    for (final candidate in step.locatorCandidates) {
+      final resolution = registry.resolve(
+        CockpitSelector.parse(candidate.selector),
+        requiredCommand: _commandForStep(step),
+      );
+      if (resolution.isSuccess) {
+        return resolution.target;
+      }
+    }
+    return null;
+  }
+
   Future<void> _performStep(CockpitInteractionStep step, CockpitTarget target) {
     switch (step.kind) {
       case CockpitInteractionStepKind.tap:
@@ -327,14 +468,11 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
       case CockpitInteractionStepKind.longPress:
         return _performGesture(CockpitGestureAction.longPress(target: target));
       case CockpitInteractionStepKind.scroll:
-        final direction = switch (step.scrollDirection!) {
-          CockpitInteractionScrollDirection.up => AxisDirection.up,
-          CockpitInteractionScrollDirection.down => AxisDirection.down,
-          CockpitInteractionScrollDirection.left => AxisDirection.left,
-          CockpitInteractionScrollDirection.right => AxisDirection.right,
-        };
         return _performGesture(
-          CockpitGestureAction.swipe(target: target, direction: direction),
+          CockpitGestureAction.swipe(
+            target: target,
+            direction: _axisDirection(step.scrollDirection!),
+          ),
         );
       case CockpitInteractionStepKind.text:
         return _performTextEntry(step, target);
@@ -405,19 +543,37 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     };
   }
 
+  static AxisDirection _axisDirection(CockpitInteractionScrollDirection d) {
+    return switch (d) {
+      CockpitInteractionScrollDirection.up => AxisDirection.up,
+      CockpitInteractionScrollDirection.down => AxisDirection.down,
+      CockpitInteractionScrollDirection.left => AxisDirection.left,
+      CockpitInteractionScrollDirection.right => AxisDirection.right,
+    };
+  }
+
   /// Whether [step] is replayable in-process: an actionable kind (`tap`,
   /// `longPress`, `scroll`, `text`) that resolved to at least one locator
   /// candidate. Everything else — non-actionable kinds and unresolved noise —
   /// reports `skipped` during [verifyReplay]. Public so the panel can derive
   /// its replay affordance from the same rule the engine enforces.
   static bool isActionable(CockpitInteractionStep step) {
+    if (step.kind == CockpitInteractionStepKind.scroll) {
+      // A scroll replays through its direction even without locator
+      // candidates: its target can be borrowed from the next step (the
+      // converter does the same) and a swipe can run from the recorded
+      // grab position alone.
+      return step.scrollDirection != null;
+    }
     if (step.unresolved) {
       return false;
     }
     return switch (step.kind) {
+      // Unreachable behind the direction check above, kept for
+      // exhaustiveness.
+      CockpitInteractionStepKind.scroll => true,
       CockpitInteractionStepKind.tap ||
       CockpitInteractionStepKind.longPress ||
-      CockpitInteractionStepKind.scroll ||
       CockpitInteractionStepKind.text => true,
       CockpitInteractionStepKind.routeChange ||
       CockpitInteractionStepKind.back ||

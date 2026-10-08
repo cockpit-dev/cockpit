@@ -69,6 +69,9 @@ CockpitInteractionStep _pendingStep(
   bool unresolved = false,
   String? routeName,
   String? resolvedValue,
+  CockpitInteractionScrollDirection? direction,
+  double? positionDx,
+  double? positionDy,
 }) => CockpitInteractionStep(
   stepId: 'pending',
   kind: kind,
@@ -76,6 +79,9 @@ CockpitInteractionStep _pendingStep(
   routeName: routeName,
   resolvedValue: resolvedValue,
   unresolved: unresolved,
+  scrollDirection: direction,
+  positionDx: positionDx,
+  positionDy: positionDy,
   phase: CockpitRecorderPhase.recording,
   recordedAt: DateTime.utc(2026, 10, 7, 9),
 );
@@ -871,6 +877,214 @@ void main() {
         );
       },
     );
+
+    test(
+      'a scroll before a target swipes until the target joins the registry',
+      () async {
+        final registry = CockpitTargetRegistry();
+        var swipes = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipes += 1;
+              if (swipes == 2) {
+                // The target sits below the fold and only joins the tree
+                // once the list has scrolled.
+                registry.register(
+                  const CockpitTarget(
+                    registrationId: 'buy-now',
+                    keyValue: 'buy-now',
+                    routeName: '/',
+                  ),
+                );
+              }
+            }
+          },
+        );
+        recorder.start();
+        // The finger landed on unregistered list content; the flow still
+        // needs the scroll to reveal the button below the fold.
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.scroll,
+            unresolved: true,
+            direction: CockpitInteractionScrollDirection.up,
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('buy-now')],
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(reports[0].status, CockpitReplayStatus.passed);
+        expect(swipes, 2);
+        expect(reports[1].status, CockpitReplayStatus.passed);
+      },
+    );
+
+    test(
+      'a goal-directed scroll deviates after six swipes without a reveal',
+      () async {
+        final registry = CockpitTargetRegistry();
+        var swipes = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipes += 1;
+            }
+          },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.scroll,
+            direction: CockpitInteractionScrollDirection.up,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('list')],
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('gone')],
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(swipes, 6);
+        expect(reports[0].status, CockpitReplayStatus.deviated);
+        expect(reports[0].reason, contains('Scrolled 6 times'));
+        expect(reports[1].status, CockpitReplayStatus.deviated);
+      },
+    );
+
+    test(
+      'a goal-directed swipe runs from the recorded grab position',
+      () async {
+        final registry = CockpitTargetRegistry();
+        Offset? swipeOrigin;
+        var sawTarget = false;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipeOrigin = action.origin;
+              sawTarget = action.target != null;
+              registry.register(
+                const CockpitTarget(
+                  registrationId: 'buy-now',
+                  keyValue: 'buy-now',
+                  routeName: '/',
+                ),
+              );
+            }
+          },
+        );
+        recorder.start();
+        // The scroll's own candidate never resolves, so the swipe must run
+        // from where the finger grabbed the list.
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.scroll,
+            direction: CockpitInteractionScrollDirection.up,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('unmade')],
+            positionDx: 120,
+            positionDy: 420,
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('buy-now')],
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(swipeOrigin, const Offset(120, 420));
+        expect(sawTarget, isFalse);
+        expect(reports[0].status, CockpitReplayStatus.passed);
+      },
+    );
+
+    test('a route boundary stops the scroll target search', () async {
+      final registry = CockpitTargetRegistry()
+        ..register(
+          const CockpitTarget(
+            registrationId: 'list',
+            keyValue: 'list',
+            routeName: '/',
+          ),
+        )
+        ..register(
+          const CockpitTarget(
+            registrationId: 'back-arrow',
+            keyValue: 'back-arrow',
+            routeName: '/details',
+          ),
+        );
+      final swipes = <CockpitGestureAction>[];
+      final recorder = CockpitInteractionRecorder(
+        registry: registry,
+        waitForIdle:
+            ({
+              required Duration quietWindow,
+              required Duration timeout,
+            }) async => true,
+        gesturePerformer: (action) async => swipes.add(action),
+      );
+      recorder.start();
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          candidates: <CockpitLocatorCandidate>[_keyCandidate('list')],
+        ),
+      );
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.routeChange,
+          routeName: '/details',
+        ),
+      );
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[_keyCandidate('back-arrow')],
+        ),
+      );
+
+      final reports = await recorder.verifyReplay();
+
+      // The scroll belongs to the previous screen: one swipe on its own
+      // candidate, not a hunt for the next screen's target.
+      expect(
+        swipes.where((a) => a.type == CockpitGestureActionType.swipe),
+        hasLength(1),
+      );
+      expect(reports[0].status, CockpitReplayStatus.passed);
+    });
 
     test('replays text steps through the handler preference order', () async {
       final entered = <String>[];
