@@ -24,9 +24,12 @@ replays it — or immediately sees where and why it deviates.
 ## Brand Personality
 
 Precise, calm, professional. The tool disappears into the task; density is
-fine, decoration is not. Visual language follows the Cockpit Console system
-(Linear/Vercel-inspired dark-first neutrals, a single blue accent, monospace
-for selectors and data).
+fine, decoration is not. Two surfaces, two registers: Cockpit Console is a
+desktop application (Linear/Vercel-inspired dark-first neutrals, a single
+blue accent, monospace for selectors and data); the in-app recorder HUD is
+a floating overlay that speaks iOS system vocabulary instead — solid dark
+surfaces, platform font, filled thumb-scale controls, a stopwatch hero —
+because it lives inside someone else's app, not beside it.
 
 ## Anti-references
 

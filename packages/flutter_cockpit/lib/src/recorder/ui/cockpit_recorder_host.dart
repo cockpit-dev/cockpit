@@ -169,11 +169,12 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
   }
 
   /// The expanded state: a scrim over the app with the solid dark recorder
-  /// panel on top. The panel is a full-width bottom sheet capped at 72% of
-  /// the overlay height (with a grab handle) on windows up to
-  /// [_sheetBreakpoint] wide, and a centered compact card (480 wide, at
-  /// most 620 tall) on wider ones. Tapping the scrim does nothing —
-  /// closing goes through the header's close button.
+  /// panel on top. The sheet/card hugs its content — a short recording
+  /// reads as a compact receipt, not a mostly-empty frame — capped at 72%
+  /// of the overlay height on windows up to [_sheetBreakpoint] wide (a
+  /// full-width bottom sheet with a grab handle), and at 480×620 on wider
+  /// ones (a centered card). Tapping the scrim does nothing — closing goes
+  /// through the header's close button.
   Widget _buildExpandedOverlay() {
     return Positioned.fill(
       key: const ValueKey<String>('cockpit_recorder_fullscreen'),
@@ -192,15 +193,25 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(cockpitRecorderSheetRadius),
                   ),
-                  child: SizedBox(
+                  child: ConstrainedBox(
                     key: const ValueKey<String>('cockpit_recorder_panel_frame'),
-                    width: bounds.width,
-                    height: bounds.height * _sheetHeightFactor,
-                    child: Column(
-                      children: <Widget>[
-                        const _SheetGrabHandle(),
-                        Expanded(child: panel),
-                      ],
+                    constraints: BoxConstraints(
+                      maxHeight: bounds.height * _sheetHeightFactor,
+                    ),
+                    child: SizedBox(
+                      width: bounds.width,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          const _SheetGrabHandle(),
+                          // Flexible carries the height cap into the panel:
+                          // a min-size Column hands non-flex children an
+                          // unbounded main axis, which would let the feed
+                          // grow past the cap instead of scrolling.
+                          Flexible(child: panel),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -210,13 +221,15 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(cockpitRecorderSheetRadius),
                 child: ConstrainedBox(
+                  key: const ValueKey<String>('cockpit_recorder_panel_frame'),
                   constraints: const BoxConstraints(
                     maxWidth: _cardWidth,
                     maxHeight: _cardMaxHeight,
                   ),
-                  child: SizedBox.expand(
-                    key: const ValueKey<String>('cockpit_recorder_panel_frame'),
-                    child: panel,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[Flexible(child: panel)],
                   ),
                 ),
               ),

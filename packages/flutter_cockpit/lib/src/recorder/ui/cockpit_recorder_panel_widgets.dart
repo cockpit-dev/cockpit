@@ -2,9 +2,15 @@ import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 
 /// Shared visual vocabulary of the recorder HUD: an iOS floating-overlay
-/// palette — solid dark surfaces, restrained semantic colors, thumb-sized
-/// controls — rebuilt from basic widgets only, so the panel depends on
-/// nothing beyond flutter/widgets.
+/// palette — solid dark surfaces, a stopwatch-scale timer, filled
+/// thumb-sized controls — rebuilt from basic widgets only, so the panel
+/// depends on nothing beyond flutter/widgets.
+///
+/// Two rules hold the system together. Controls are Filled, never
+/// outlined: a hairline-bordered translucent pill reads as a wireframe
+/// placeholder, while a solid fill reads as a control. And hierarchy comes
+/// from scale and fill, not from border weight: one primary filled control
+/// per zone, everything else quiet.
 
 // --- Colors ---
 
@@ -50,21 +56,39 @@ const Color cockpitRecorderChipFill = Color(0x22FFFFFF);
 
 const double cockpitRecorderSheetRadius = 20;
 const double cockpitRecorderButtonRadius = 12;
+const double cockpitRecorderGlyphRadius = 9;
 const double cockpitRecorderChipRadius = 8;
 
 // --- Text styles (all platform-default fonts; nothing is monospaced) ---
 
-/// Panel titles and status: 15/w600.
+/// The hero clock while a session exists: 26/w600 — the timer is the
+/// product, so it is the largest type on the panel.
+const TextStyle cockpitRecorderTimerStyle = TextStyle(
+  color: cockpitRecorderInkPrimary,
+  fontSize: 26,
+  fontWeight: FontWeight.w600,
+  height: 1.1,
+);
+
+/// The idle hero title: quieter than the live clock, still first.
+const TextStyle cockpitRecorderHeroStyle = TextStyle(
+  color: cockpitRecorderInkPrimary,
+  fontSize: 20,
+  fontWeight: FontWeight.w600,
+  height: 1.1,
+);
+
+/// Empty-state headings: 15/w600.
 const TextStyle cockpitRecorderTitleStyle = TextStyle(
   color: cockpitRecorderInkPrimary,
   fontSize: 15,
   fontWeight: FontWeight.w600,
 );
 
-/// Step titles and input text: 14/w500.
+/// Step titles and input text: 15/w500.
 const TextStyle cockpitRecorderBodyStyle = TextStyle(
   color: cockpitRecorderInkPrimary,
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: FontWeight.w500,
 );
 
@@ -82,7 +106,7 @@ const TextStyle cockpitRecorderMicroStyle = TextStyle(
 
 /// Visual tones of [CockpitRecorderPanelButton].
 enum CockpitRecorderButtonVariant {
-  /// Elevated fill with a hairline stroke for regular commands.
+  /// Elevated solid fill for regular commands.
   secondary,
 
   /// Accent-filled for the one primary action of a zone.
@@ -91,7 +115,8 @@ enum CockpitRecorderButtonVariant {
   /// Record-red-filled for the session's stop command.
   record,
 
-  /// Borderless, for low-emphasis inline actions (dismiss, delete).
+  /// Borderless, for low-emphasis inline actions (dismiss, delete, the
+  /// quiet action row).
   text,
 }
 
@@ -165,7 +190,6 @@ final class _CockpitRecorderPanelButtonState
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: _background(interactive),
-                border: _border(interactive),
                 borderRadius: BorderRadius.circular(
                   cockpitRecorderButtonRadius,
                 ),
@@ -187,38 +211,29 @@ final class _CockpitRecorderPanelButtonState
     );
   }
 
-  Color _fillTone() => widget.variant == CockpitRecorderButtonVariant.accent
-      ? cockpitRecorderAccent
-      : cockpitRecorderRecord;
-
   Color _background(bool interactive) {
     final variant = widget.variant;
     if (widget.onPressed == null) {
-      return variant == CockpitRecorderButtonVariant.secondary
-          ? cockpitRecorderSurfaceElevated.withValues(alpha: 0.4)
-          : variant == CockpitRecorderButtonVariant.text
+      return variant == CockpitRecorderButtonVariant.text
           ? const Color(0x00000000)
-          : _fillTone().withValues(alpha: 0.4);
+          : _backgroundFor(variant).withValues(alpha: 0.4);
     }
     return switch (variant) {
-      CockpitRecorderButtonVariant.accent ||
-      CockpitRecorderButtonVariant.record =>
-        interactive ? _fillTone().withValues(alpha: 0.85) : _fillTone(),
-      CockpitRecorderButtonVariant.secondary => cockpitRecorderSurfaceElevated,
-      CockpitRecorderButtonVariant.text => const Color(0x00000000),
+      // The quiet tones answer hover with fill; filled tones keep their
+      // solid fill and let the label carry the state.
+      CockpitRecorderButtonVariant.secondary =>
+        interactive ? const Color(0xFF3A3A3C) : cockpitRecorderSurfaceElevated,
+      _ => _backgroundFor(variant),
     };
   }
 
-  Border? _border(bool interactive) {
-    if (widget.variant != CockpitRecorderButtonVariant.secondary) {
-      return null;
-    }
-    if (widget.onPressed == null) {
-      return Border.all(color: cockpitRecorderStroke.withValues(alpha: 0.4));
-    }
-    return Border.all(
-      color: interactive ? cockpitRecorderStrokeHover : cockpitRecorderStroke,
-    );
+  Color _backgroundFor(CockpitRecorderButtonVariant variant) {
+    return switch (variant) {
+      CockpitRecorderButtonVariant.accent => cockpitRecorderAccent,
+      CockpitRecorderButtonVariant.record => cockpitRecorderRecord,
+      CockpitRecorderButtonVariant.secondary => cockpitRecorderSurfaceElevated,
+      CockpitRecorderButtonVariant.text => const Color(0x00000000),
+    };
   }
 
   Color _foreground(bool interactive) {
@@ -263,7 +278,7 @@ final class CockpitRecorderPanelChip extends StatelessWidget {
   }
 }
 
-/// 28×28 borderless close button for panel headers.
+/// 32×32 borderless close button for panel headers.
 final class CockpitRecorderPanelCloseButton extends StatefulWidget {
   /// Creates a close button invoking [onPressed].
   const CockpitRecorderPanelCloseButton({required this.onPressed, super.key});
@@ -290,8 +305,8 @@ final class _CockpitRecorderPanelCloseButtonState
         child: GestureDetector(
           onTap: widget.onPressed,
           child: SizedBox(
-            width: 28,
-            height: 28,
+            width: 32,
+            height: 32,
             child: Center(
               child: Text(
                 '✕',
@@ -299,7 +314,7 @@ final class _CockpitRecorderPanelCloseButtonState
                   color: _hovered
                       ? cockpitRecorderInkPrimary
                       : cockpitRecorderInkTertiary,
-                  fontSize: 14,
+                  fontSize: 15,
                 ),
               ),
             ),
@@ -311,8 +326,9 @@ final class _CockpitRecorderPanelCloseButtonState
 }
 
 /// Single-line text field built on [EditableText] — the widgets-layer input
-/// widget, since the panel avoids Material composite widgets. 36 high,
-/// elevated fill with a hairline stroke that brightens on focus.
+/// widget, since the panel avoids Material composite widgets. 40 high,
+/// elevated fill; focus draws an accent ring at a constant border width so
+/// focusing never shifts the field's layout.
 ///
 /// The caller owns the [controller] (it reads the value when a button fires);
 /// the field owns its [FocusNode] and exposes [onSubmitted] for enter-driven
@@ -323,12 +339,16 @@ final class CockpitRecorderPanelTextField extends StatefulWidget {
     required this.controller,
     required this.hint,
     this.onSubmitted,
+    this.autofocus = false,
     super.key,
   });
 
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String>? onSubmitted;
+
+  /// Grabs focus when the field first appears.
+  final bool autofocus;
 
   @override
   State<CockpitRecorderPanelTextField> createState() =>
@@ -377,17 +397,17 @@ final class _CockpitRecorderPanelTextFieldState
 
   @override
   Widget build(BuildContext context) {
+    final focused = _focusNode.hasFocus;
     return Container(
-      height: 36,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: cockpitRecorderSurfaceElevated,
         borderRadius: BorderRadius.circular(cockpitRecorderButtonRadius),
         border: Border.all(
-          color: _focusNode.hasFocus
-              ? cockpitRecorderStrokeHover
-              : cockpitRecorderStroke,
+          width: 1.5,
+          color: focused ? cockpitRecorderAccent : const Color(0x00000000),
         ),
       ),
       child: Stack(
@@ -406,6 +426,7 @@ final class _CockpitRecorderPanelTextFieldState
           EditableText(
             controller: widget.controller,
             focusNode: _focusNode,
+            autofocus: widget.autofocus,
             style: cockpitRecorderBodyStyle,
             cursorColor: cockpitRecorderAccent,
             backgroundCursorColor: cockpitRecorderInkTertiary,

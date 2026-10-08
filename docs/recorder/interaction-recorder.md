@@ -231,20 +231,24 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
   engine — phase, step list, replay report, export bundle; all commands.
   Panels and custom hosts bind to it exclusively; nothing reaches the
   engine directly.
-- `CockpitRecorderPanel`: a mobile-HUD column on a solid dark surface —
-  a REC timer header (phase dot, a `REC {mm:ss}` clock recomputed on every
-  controller notification, step count, close), an iOS-list step flow (leading
-  dot, action title, selector line, replay outcomes tinting the dot, annotate,
-  delete-last), an action row (verify replay, copy YAML, save via an
-  injectable `CockpitRecorderExportGateway`; the default writes the YAML to a
-  caller-supplied directory with `dart:io`; share-sheet affordances are the
-  host's concern), and the current phase's session controls along the bottom.
+- `CockpitRecorderPanel`: a mobile-HUD column on a solid dark surface that
+  sizes to its content (hosts cap the height) — a stopwatch hero header
+  (phase dot, a `{mm:ss}` clock recomputed on every controller notification
+  and frozen once stopped, phase/step caption, close), an iOS-receipt step
+  flow (leading glyph tile whose stroke carries replay and resolution state,
+  action title, selector line, annotate, delete-last; segment tools under a
+  collapsed `+ Add segment` affordance), a quiet export row (verify replay,
+  copy YAML, save via an injectable `CockpitRecorderExportGateway`; the
+  default writes the YAML to a caller-supplied directory with `dart:io`;
+  share-sheet affordances are the host's concern), and the current phase's
+  thumb-scale session controls along the bottom.
 - Default host `CockpitRecorderHost`: compact 40×40 draggable dark floating
   ball with edge docking; expands into a scrim-backed solid panel — a
   full-width bottom sheet with a grab handle on phone-width windows, a
-  centered 480-wide solid card on wider ones. Collapsed ball is a small REC
-  indicator. Host mode `guest` mounts no entry (panel content only, for
-  embedding in an existing floating window); `headless` mounts nothing.
+  centered 480-wide card on wider ones, both hugging their content up to a
+  height cap. Collapsed ball is a small REC indicator. Host mode `guest`
+  mounts no entry (panel content only, for embedding in an existing floating
+  window); `headless` mounts nothing.
 
 ## Converter (`cockpit_protocol`, `lib/src/recorder/`)
 

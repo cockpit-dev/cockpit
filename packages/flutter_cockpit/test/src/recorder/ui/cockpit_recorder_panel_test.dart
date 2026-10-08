@@ -23,7 +23,7 @@ void main() {
       expect(find.text('RECORDING'), findsNothing);
     });
 
-    testWidgets('switches the status title through the session phases', (
+    testWidgets('switches the hero clock and caption through the phases', (
       tester,
     ) async {
       final controller = await pumpPanel(tester);
@@ -32,23 +32,26 @@ void main() {
       await tester.pump();
 
       // The clock is recomputed per controller notification: a fresh
-      // session reads 00:00.
-      expect(find.text('REC 00:00'), findsOneWidget);
-      expect(find.text(' · 0 steps'), findsOneWidget);
+      // session reads 00:00, with the phase and count in the caption.
+      expect(find.text('00:00'), findsOneWidget);
+      expect(find.text('Recording · 0 steps'), findsOneWidget);
 
       controller.recorder.recordInteractionStep(
         unresolvedStep(CockpitInteractionStepKind.tap),
       );
       await tester.pump();
-      expect(find.text(' · 1 steps'), findsOneWidget);
+      expect(find.text('Recording · 1 step'), findsOneWidget);
 
       controller.pause();
       await tester.pump();
-      expect(find.text('Paused · 00:00'), findsOneWidget);
+      expect(find.text('Paused · 1 step'), findsOneWidget);
 
       controller.stop();
       await tester.pump();
-      expect(find.text('Stopped'), findsOneWidget);
+      expect(find.text('Stopped · 1 step'), findsOneWidget);
+      // The stopped clock freezes at the session's end instead of tracking
+      // whatever notification arrives next.
+      expect(find.text('00:00'), findsOneWidget);
     });
 
     testWidgets('embedded panels render no close button', (tester) async {
@@ -71,20 +74,21 @@ void main() {
       controller.start();
       await tester.pump();
 
-      // recording: pause + stop + the segment tools.
+      // recording: pause + stop + the collapsed segment affordance.
       expect(find.text('Record'), findsNothing);
       expect(isButtonEnabled(tester, 'Pause'), isTrue);
       expect(find.text('Resume'), findsNothing);
       expect(isButtonEnabled(tester, 'Stop'), isTrue);
-      expect(find.text('New segment label'), findsOneWidget);
+      expect(isButtonEnabled(tester, '+ Add segment'), isTrue);
 
       controller.pause();
       await tester.pump();
 
-      // paused: resume + stop.
+      // paused: resume + stop; segments annotate a live capture only.
       expect(find.text('Pause'), findsNothing);
       expect(isButtonEnabled(tester, 'Resume'), isTrue);
       expect(isButtonEnabled(tester, 'Stop'), isTrue);
+      expect(find.text('+ Add segment'), findsNothing);
 
       controller.resume();
       controller.stop();
@@ -96,7 +100,7 @@ void main() {
       expect(find.text('Stop'), findsNothing);
       expect(find.text('Session name (optional)'), findsNothing);
       expect(
-        find.text('Session stopped — export below or record again.'),
+        find.text('Session stopped — export above or record again.'),
         findsOneWidget,
       );
     });
@@ -155,26 +159,37 @@ void main() {
       controller.start();
       await tester.pump();
 
-      // The empty-label guard: Add segment stays disabled until text lands.
-      expect(isButtonEnabled(tester, 'Add segment'), isFalse);
-      expect(isButtonEnabled(tester, 'End segment'), isFalse);
+      // Resting shows one quiet affordance; the composer is collapsed and
+      // the end control only exists while a segment is open.
+      expect(find.byType(EditableText), findsNothing);
+      expect(find.text('End segment'), findsNothing);
+
+      await tester.tap(find.text('+ Add segment'));
+      await tester.pump();
+      expect(find.text('Segment label'), findsOneWidget);
+
+      // The empty-label guard: Add stays disabled until text lands.
+      expect(isButtonEnabled(tester, 'Add'), isFalse);
 
       await tester.enterText(find.byType(EditableText), 'setup');
       await tester.pump();
-      expect(isButtonEnabled(tester, 'Add segment'), isTrue);
+      expect(isButtonEnabled(tester, 'Add'), isTrue);
 
-      await tester.tap(find.text('Add segment'));
+      await tester.tap(find.text('Add'));
       await tester.pump();
 
       expect(controller.openSegments, <String>['setup']);
       expect(find.text('setup'), findsOneWidget);
       expect(isButtonEnabled(tester, 'End segment'), isTrue);
+      // Adding collapsed the composer back to the quiet affordance.
+      expect(find.byType(EditableText), findsNothing);
+      expect(isButtonEnabled(tester, '+ Add segment'), isTrue);
 
       await tester.tap(find.text('End segment'));
       await tester.pump();
 
       expect(controller.openSegments, isEmpty);
-      expect(isButtonEnabled(tester, 'End segment'), isFalse);
+      expect(find.text('End segment'), findsNothing);
     });
 
     testWidgets('submitting the segment field begins the segment', (
@@ -182,6 +197,9 @@ void main() {
     ) async {
       final controller = await pumpPanel(tester);
       controller.start();
+      await tester.pump();
+
+      await tester.tap(find.text('+ Add segment'));
       await tester.pump();
 
       await tester.enterText(find.byType(EditableText), 'via-keyboard');
@@ -192,9 +210,9 @@ void main() {
       await tester.pump();
 
       expect(controller.openSegments, <String>['via-keyboard']);
-      // The field cleared itself after submitting.
-      final field = tester.widget<EditableText>(find.byType(EditableText));
-      expect(field.controller.text, isEmpty);
+      // Submitting collapsed the composer; the label moved into a chip.
+      expect(find.byType(EditableText), findsNothing);
+      expect(find.text('via-keyboard'), findsOneWidget);
     });
 
     testWidgets('illegal commands surface inline errors', (tester) async {
@@ -237,12 +255,12 @@ void main() {
       expect(find.text('Tap · save'), findsOneWidget);
       expect(find.text('@save'), findsOneWidget);
       expect(find.text('(unresolved target)'), findsOneWidget);
-      // The leading dots carry the row state: neutral for a resolved step,
-      // amber for an unresolved one.
+      // The glyphs carry the row state: neutral for a resolved step, amber
+      // for an unresolved one.
       final firstRow = find.byKey(const ValueKey<String>('s1'));
       final secondRow = find.byKey(const ValueKey<String>('s2'));
-      expect(leadingDotColor(tester, firstRow), cockpitRecorderInkTertiary);
-      expect(leadingDotColor(tester, secondRow), cockpitRecorderWarning);
+      expect(stepGlyphColor(tester, firstRow), cockpitRecorderInkTertiary);
+      expect(stepGlyphColor(tester, secondRow), cockpitRecorderWarning);
     });
 
     testWidgets('renders relative times from the first step', (tester) async {
@@ -706,12 +724,12 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // The outcomes tint the rows' leading dots, joined by step id.
+      // The outcomes tint the rows' glyphs, joined by step id.
       final s1Row = find.byKey(const ValueKey<String>('s1'));
       final s2Row = find.byKey(const ValueKey<String>('s2'));
       final s3Row = find.byKey(const ValueKey<String>('s3'));
-      expect(leadingDotColor(tester, s1Row), cockpitRecorderSuccess);
-      expect(leadingDotColor(tester, s2Row), cockpitRecorderRecord);
+      expect(stepGlyphColor(tester, s1Row), cockpitRecorderSuccess);
+      expect(stepGlyphColor(tester, s2Row), cockpitRecorderRecord);
       expect(
         find.descendant(
           of: s2Row,
@@ -719,7 +737,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(leadingDotColor(tester, s3Row), cockpitRecorderInkTertiary);
+      expect(stepGlyphColor(tester, s3Row), cockpitRecorderInkTertiary);
       expect(
         find.text('replay: 1 passed · 1 deviated · 1 skipped'),
         findsOneWidget,

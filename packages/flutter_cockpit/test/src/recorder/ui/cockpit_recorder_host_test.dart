@@ -66,7 +66,7 @@ void main() {
   });
 
   group('host', () {
-    Future<void> pumpHost(WidgetTester tester) async {
+    Future<CockpitRecorderController> pumpHost(WidgetTester tester) async {
       final controller = newController();
       await tester.pumpWidget(
         CockpitRecorderScope(
@@ -74,6 +74,7 @@ void main() {
           child: CockpitRecorderHost(controller: controller),
         ),
       );
+      return controller;
     }
 
     Finder frame() =>
@@ -231,7 +232,7 @@ void main() {
       expect(find.byType(CockpitRecorderPanel), findsNothing);
     });
 
-    testWidgets('centers a 480-wide solid card on wide windows', (
+    testWidgets('centers a 480-wide content-sized card on wide windows', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(1920, 1080));
@@ -241,8 +242,14 @@ void main() {
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pumpAndSettle();
 
-      // The card centers at 480x620, clipped to its rounded shape.
-      expect(tester.getRect(frame()), const Rect.fromLTWH(720, 230, 480, 620));
+      // The card hugs its content: 480 wide, centered, never taller than
+      // 620, and an idle panel is far shorter than the cap.
+      final rect = tester.getRect(frame());
+      expect(rect.left, 720.0);
+      expect(rect.width, 480.0);
+      expect(rect.height, lessThan(620));
+      expect(rect.height, greaterThan(250));
+      expect(rect.center.dy, 540.0);
       // The card form has no grab handle.
       expect(handle(), findsNothing);
       expect(
@@ -272,8 +279,14 @@ void main() {
         await tester.tap(find.byType(CockpitRecorderEntryButton));
         await tester.pumpAndSettle();
 
-        // Full width at the bottom, capped at 72% of the overlay height.
-        expect(tester.getRect(frame()), const Rect.fromLTWH(0, 224, 400, 576));
+        // Full width at the bottom, hugging its content well under the 72%
+        // height cap.
+        final rect = tester.getRect(frame());
+        expect(rect.left, 0.0);
+        expect(rect.width, 400.0);
+        expect(rect.bottom, 800.0);
+        expect(rect.height, lessThan(576));
+        expect(rect.height, greaterThan(250));
         // The sheet form carries a 36x5 grab handle, centered at its top.
         expect(handle(), findsOneWidget);
         expect(tester.getSize(handle()), const Size(36, 5));
@@ -283,6 +296,39 @@ void main() {
         );
       },
     );
+
+    testWidgets('the sheet grows with steps but caps at 72% of the height', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = await pumpHost(tester);
+
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+      final idleHeight = tester.getRect(frame()).height;
+
+      controller.start();
+      for (var index = 0; index < 14; index += 1) {
+        controller.recorder.recordInteractionStep(
+          stepWithCandidates(CockpitInteractionStepKind.tap),
+        );
+      }
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Many steps fill the cap exactly: 0.72 × 800, still bottom-docked.
+      final rect = tester.getRect(frame());
+      expect(rect.bottom, 800.0);
+      expect(rect.height, 576.0);
+      expect(rect.height, greaterThan(idleHeight));
+      // The capped feed scrolls; the newest row is on screen.
+      expect(find.byKey(const ValueKey<String>('s14')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('s14')).hitTestable(),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('tapping the scrim keeps the panel open', (tester) async {
       await tester.binding.setSurfaceSize(const Size(400, 800));

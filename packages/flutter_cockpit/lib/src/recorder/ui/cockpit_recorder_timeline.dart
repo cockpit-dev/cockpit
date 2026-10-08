@@ -4,13 +4,15 @@ import 'package:flutter/widgets.dart';
 import '../cockpit_replay_report.dart';
 import 'cockpit_recorder_controller.dart';
 import 'cockpit_recorder_panel_widgets.dart';
+import 'cockpit_recorder_step_glyph.dart';
 
-/// Step flow of the recorder panel: a plain iOS-style list — a leading dot,
-/// an action title, a selector line — newest last and auto-scrolled to the
-/// newest step, hairline separators between rows. Rows expand in place: tap
+/// Step flow of the recorder panel: an iOS-style receipt list — a leading
+/// glyph tile whose stroke carries the row's state, an action title, a
+/// selector line — newest last and auto-scrolled to the newest step,
+/// hairline separators indented to the text. Rows expand in place: tap
 /// anywhere on a row to inspect its locator candidates and edit its note.
 /// Replay outcomes join from the controller's last verify-replay pass and
-/// color the row's dot.
+/// tint the row's glyph.
 ///
 /// Delete is an engine constraint, not a UI preference: only the most
 /// recently recorded step can be discarded, so the affordance appears on the
@@ -112,10 +114,11 @@ final class _CockpitRecorderTimelineState
         };
         return ListView.separated(
           controller: _scrollController,
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: steps.length,
           separatorBuilder: (_, _) => Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
+            margin: const EdgeInsets.fromLTRB(64, 0, 20, 0),
             height: 0.5,
             color: cockpitRecorderSeparator,
           ),
@@ -150,29 +153,28 @@ final class _TimelineEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              'No steps yet',
-              style: cockpitRecorderTitleStyle.copyWith(
-                color: cockpitRecorderInkSecondary,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            'No steps yet',
+            style: cockpitRecorderTitleStyle.copyWith(
+              color: cockpitRecorderInkSecondary,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Start a recording and use your app. Taps, text, scrolls, and '
-              'route changes appear here as they are captured.',
-              textAlign: TextAlign.center,
-              style: cockpitRecorderSecondaryStyle.copyWith(
-                color: cockpitRecorderInkTertiary,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Start a recording and use your app. Taps, text, scrolls, and '
+            'route changes appear here as they are captured.',
+            textAlign: TextAlign.center,
+            style: cockpitRecorderSecondaryStyle.copyWith(
+              color: cockpitRecorderInkTertiary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -219,14 +221,11 @@ final class _TimelineRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onToggle,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: _LeadingDot(color: _nodeColor()),
-            ),
+            CockpitRecorderStepGlyph(kind: step.kind, color: _nodeColor()),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -398,22 +397,6 @@ final class _TimelineRow extends StatelessWidget {
     return step.unresolved
         ? cockpitRecorderWarning
         : cockpitRecorderInkTertiary;
-  }
-}
-
-/// The 8px leading dot of a step row.
-final class _LeadingDot extends StatelessWidget {
-  const _LeadingDot({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
   }
 }
 

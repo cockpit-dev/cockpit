@@ -22,6 +22,7 @@ export 'src/recorder/ui/cockpit_recorder_host.dart';
 export 'src/recorder/ui/cockpit_recorder_indicator.dart';
 export 'src/recorder/ui/cockpit_recorder_panel.dart';
 export 'src/recorder/ui/cockpit_recorder_scope.dart';
+export 'src/recorder/ui/cockpit_recorder_step_glyph.dart';
 export 'src/runtime/flutter_cockpit.dart';
 export 'src/runtime/flutter_cockpit_app.dart';
 export 'src/runtime/flutter_cockpit_binding.dart';
