@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_cli_output.dart';
 import 'package:cockpit/src/cli/cockpit_cli_session_handles.dart';
@@ -406,26 +407,115 @@ void main() {
     },
   );
 
-  test('record runtime relays the session bridge token to the app', () async {
-    final fixtures = await _SessionFixtures.create(authenticationEnabled: true);
+  test(
+    'record runtime executes recorder operations through the dev session',
+    () async {
+      final fixtures = await _SessionFixtures.create();
+      addTearDown(fixtures.dispose);
+      final calls = <(String, Map<String, Object?>)>[];
+      final dev = CockpitDevRuntime(
+        fixtures.runtime,
+        operationInvoker: (_, kind, input) async {
+          calls.add((kind, input));
+          if (kind == 'session.development.get') {
+            // The worker sanitizer strips bridge addresses, so a live query
+            // answers without any runtime bridge block — resolution must not
+            // depend on it anymore.
+            return _operationResult(const <String, Object?>{
+              'sessionId': 'session-1',
+              'targetId': 'target-1',
+              'appId': 'app-1',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            });
+          }
+          return _succeededOperation(kind, <String, Object?>{
+            'sessionId': 'r1',
+            'phase': 'recording',
+            'startedAt': '2026-10-07T09:00:00.000Z',
+            'stepCount': 2,
+            'unresolvedCount': 0,
+          });
+        },
+      );
+      fixtures.runtime.configureOutput(
+        command: 'record.start',
+        selection: const CockpitCliOutputSelection(
+          format: CockpitCliFormat.json,
+          view: CockpitCliOutputView.full,
+        ),
+      );
+
+      final (service, exitCode) = await CockpitRecordRuntime(
+        fixtures.runtime,
+        dev,
+      ).resolve(action: 'record.start', session: null, endpoint: null);
+
+      expect(exitCode, cockpitSuccessExitCode);
+      expect(
+        await service!.start(name: 'auth flow'),
+        containsPair('phase', 'recording'),
+      );
+      await service.steps(after: 1);
+      expect(calls.map((call) => call.$1), const <String>[
+        'session.development.get',
+        'recorder.start',
+        'recorder.steps',
+      ]);
+      expect(calls[1].$2, <String, Object?>{
+        'sessionId': 'session-1',
+        'name': 'auth flow',
+      });
+      expect(calls[2].$2, <String, Object?>{
+        'sessionId': 'session-1',
+        'after': 1,
+      });
+      // The app is never dialed directly: the worker owns the bridge address.
+      expect(app.requestCount, 0);
+    },
+  );
+
+  test('record runtime surfaces a failed recorder operation', () async {
+    final fixtures = await _SessionFixtures.create();
     addTearDown(fixtures.dispose);
     final dev = CockpitDevRuntime(
       fixtures.runtime,
       operationInvoker: (_, kind, _) async {
-        expect(kind, 'session.development.get');
-        return _operationResult(_readyOutput(app.endpoint));
+        if (kind == 'session.development.get') {
+          return _operationResult(_readyOutput(app.endpoint));
+        }
+        return _failedOperationResult();
       },
+    );
+    fixtures.runtime.configureOutput(
+      command: 'record.pause',
+      selection: const CockpitCliOutputSelection(
+        format: CockpitCliFormat.json,
+        view: CockpitCliOutputView.full,
+      ),
     );
 
     final (service, exitCode) = await CockpitRecordRuntime(
       fixtures.runtime,
       dev,
-    ).resolve(action: 'record.start', session: null, endpoint: null);
+    ).resolve(action: 'record.pause', session: null, endpoint: null);
 
     expect(exitCode, cockpitSuccessExitCode);
-    await service!.start(name: 'auth flow');
-    expect(app.startBodies.single, <String, Object?>{'name': 'auth flow'});
-    expect(app.authTokens, const <String>['bridge-token-1']);
+    await expectLater(
+      service!.pause(),
+      throwsA(
+        isA<CockpitApplicationServiceException>()
+            .having(
+              (error) => error.code,
+              'code',
+              'developmentSessionUnavailable',
+            )
+            .having((error) => error.message, 'message', contains('session-1')),
+      ),
+    );
   });
 
   test('record reports an unreachable endpoint as retryable', () async {
@@ -483,7 +573,7 @@ void main() {
   });
 
   test(
-    'record runtime resolves the live bridge through the dev session',
+    'record runtime resolves the recorder service through the dev session',
     () async {
       final fixtures = await _SessionFixtures.create();
       addTearDown(fixtures.dispose);
@@ -492,18 +582,23 @@ void main() {
         fixtures.runtime,
         operationInvoker: (_, kind, _) async {
           calls.add(kind);
-          expect(kind, 'session.development.get');
-          return _operationResult(<String, Object?>{
-            'sessionId': 'session-1',
-            'targetId': 'target-1',
-            'appId': 'app-1',
-            'status': <String, Object?>{
-              'state': 'ready',
-              'appReachable': true,
-              'remoteSessionReachable': true,
-            },
-            'runtime': <String, Object?>{
-              'bridge': <String, Object?>{'baseUrl': app.endpoint.toString()},
+          expect(kind, anyOf('session.development.get', 'recorder.get'));
+          return _succeededOperation(kind, <String, Object?>{
+            if (kind == 'session.development.get') ...const <String, Object?>{
+              'sessionId': 'session-1',
+              'targetId': 'target-1',
+              'appId': 'app-1',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            } else ...const <String, Object?>{
+              'sessionId': 'r1',
+              'phase': 'recording',
+              'startedAt': '2026-10-07T09:00:00.000Z',
+              'stepCount': 2,
+              'unresolvedCount': 0,
             },
           });
         },
@@ -524,7 +619,7 @@ void main() {
       expect(exitCode, cockpitSuccessExitCode);
       expect(service, isNotNull);
       expect(await service!.status(), containsPair('sessionId', 'r1'));
-      expect(calls, const <String>['session.development.get']);
+      expect(calls, const <String>['session.development.get', 'recorder.get']);
     },
   );
 
@@ -593,6 +688,7 @@ final class _RecorderAppServer {
   final HttpServer _server;
   final List<Map<String, Object?>> startBodies = <Map<String, Object?>>[];
   final List<String> authTokens = <String>[];
+  int requestCount = 0;
 
   /// While true the app mirrors a cold app: no session yet and lifecycle
   /// operations answer the server error the engine would raise.
@@ -615,6 +711,7 @@ final class _RecorderAppServer {
   Future<void> close() => _server.close(force: true);
 
   void _handle(HttpRequest request) async {
+    requestCount++;
     if (delay > Duration.zero) {
       await Future<void>.delayed(delay);
     }
@@ -805,11 +902,17 @@ final class _SessionFixtures {
   }
 }
 
-CockpitOperationResult _operationResult(Map<String, Object?> output) {
+CockpitOperationResult _operationResult(Map<String, Object?> output) =>
+    _succeededOperation('session.development.get', output);
+
+CockpitOperationResult _succeededOperation(
+  String kind,
+  Map<String, Object?> output,
+) {
   final now = DateTime.utc(2026, 10, 7);
   return CockpitOperationResult(
-    operationId: 'operation-development-get',
-    kind: 'session.development.get',
+    operationId: 'operation-$kind',
+    kind: kind,
     workspaceId: 'workspace-1',
     lifecycle: CockpitOperationLifecycle.completed,
     outcome: CockpitOperationOutcome.succeeded,

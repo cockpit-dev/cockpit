@@ -15,7 +15,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// optional recording name, the live status line, and inline errors.
 ///
 /// Enablement follows the recorder phase matrix; every command additionally
-/// requires a resolved endpoint and no command in flight.
+/// requires a live recorder connection and no command in flight.
 final class InteractionRecorderControls extends StatefulWidget {
   const InteractionRecorderControls({
     required this.state,
@@ -52,7 +52,7 @@ final class _InteractionRecorderControlsState
     final state = widget.state;
     final theme = Theme.of(context);
     final colors = context.consoleColors;
-    final connected = state.endpoint != null;
+    final connected = state.connected;
     final interactive = connected && !state.commandBusy;
 
     return Padding(

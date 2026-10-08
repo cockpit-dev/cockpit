@@ -11,6 +11,7 @@ import '../application/cockpit_inspect_surface_service.dart';
 import '../application/cockpit_inspect_ui_service.dart';
 import '../application/cockpit_interactive_result_profile.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
+import '../application/cockpit_interaction_recorder_app_service.dart';
 import '../application/cockpit_read_errors_service.dart';
 import '../application/cockpit_read_logs_service.dart';
 import '../application/cockpit_read_network_service.dart';
@@ -73,6 +74,7 @@ final class CockpitWorkerInteractiveOperations {
     CockpitStartRecordingService? startRecordingService,
     CockpitStopRecordingService? stopRecordingService,
     CockpitResizeViewportService? resizeViewportService,
+    CockpitInteractionRecorderAppService? interactionRecorderService,
   }) {
     final snapshots = snapshotStore ?? CockpitInteractiveSnapshotStore();
     final retainedRegistry = CockpitSessionRegistry();
@@ -168,6 +170,8 @@ final class CockpitWorkerInteractiveOperations {
           ),
       resizeViewportService:
           resizeViewportService ?? CockpitResizeViewportService(),
+      interactionRecorderService:
+          interactionRecorderService ?? CockpitInteractionRecorderAppService(),
     );
   }
 
@@ -195,6 +199,7 @@ final class CockpitWorkerInteractiveOperations {
     required CockpitStartRecordingService startRecordingService,
     required CockpitStopRecordingService stopRecordingService,
     required CockpitResizeViewportService resizeViewportService,
+    required CockpitInteractionRecorderAppService interactionRecorderService,
   }) : _registry = registry,
        _developmentRuntime = developmentRuntime,
        _systemActionParameters = systemActionParameters,
@@ -215,7 +220,8 @@ final class CockpitWorkerInteractiveOperations {
        _waitIdle = waitIdleService,
        _startRecording = startRecordingService,
        _stopRecording = stopRecordingService,
-       _resizeViewport = resizeViewportService;
+       _resizeViewport = resizeViewportService,
+       _interactionRecorder = interactionRecorderService;
 
   static const Set<String> kinds = <String>{
     'ui.inspect',
@@ -236,6 +242,13 @@ final class CockpitWorkerInteractiveOperations {
     'recording.start',
     'recording.stop',
     'viewport.set',
+    'recorder.start',
+    'recorder.pause',
+    'recorder.resume',
+    'recorder.stop',
+    'recorder.get',
+    'recorder.steps',
+    'recorder.export',
   };
 
   final String workspaceId;
@@ -261,6 +274,7 @@ final class CockpitWorkerInteractiveOperations {
   final CockpitStartRecordingService _startRecording;
   final CockpitStopRecordingService _stopRecording;
   final CockpitResizeViewportService _resizeViewport;
+  final CockpitInteractionRecorderAppService _interactionRecorder;
 
   Future<Map<String, Object?>> execute({
     required String kind,
@@ -312,6 +326,19 @@ final class CockpitWorkerInteractiveOperations {
       sanitizer,
     ),
     'viewport.set' => _resizeViewportOperation(
+      input,
+      context,
+      grants,
+      sanitizer,
+    ),
+    'recorder.start' ||
+    'recorder.pause' ||
+    'recorder.resume' ||
+    'recorder.stop' ||
+    'recorder.get' ||
+    'recorder.steps' ||
+    'recorder.export' => _recorderOperation(
+      kind,
       input,
       context,
       grants,
@@ -1234,6 +1261,79 @@ final class CockpitWorkerInteractiveOperations {
       ),
     );
     return _sanitize(result.toJson(), pair.binding, sanitizer);
+  }
+
+  Future<Map<String, Object?>> _recorderOperation(
+    String kind,
+    Map<String, Object?> input,
+    CockpitWorkspaceOperationContext context,
+    List<CockpitWorkerResourceGrant> grants,
+    CockpitWorkerResultSanitizer sanitizer,
+  ) async {
+    final pair = await _session(
+      input,
+      extra: switch (kind) {
+        'recorder.start' => const <String>{'name'},
+        'recorder.steps' => const <String>{'after'},
+        _ => const <String>{},
+      },
+    );
+    // Reads arrive grant-less (no lease is acquired for read-only
+    // operations), so they follow the inspect/logs allowUnleased convention;
+    // the mutating kinds keep the strict session-grant requirement.
+    _requireSessionGrant(
+      pair.binding,
+      context,
+      grants,
+      allowUnleased: kind == 'recorder.get' || kind == 'recorder.steps',
+    );
+    final app = await _registry.requireApp(pair.binding.appId);
+    final requestTimeout = context.deadline.difference(DateTime.now().toUtc());
+    if (requestTimeout <= Duration.zero) {
+      throw TimeoutException('Workspace operation deadline expired.');
+    }
+    final result = await runWorkerApplicationOperation(
+      context: context,
+      operation: () => switch (kind) {
+        'recorder.start' => _interactionRecorder.start(
+          app.handle,
+          name: pair.input.optionalString('name', maximum: 256),
+          requestTimeout: requestTimeout,
+        ),
+        'recorder.pause' => _interactionRecorder.pause(
+          app.handle,
+          requestTimeout: requestTimeout,
+        ),
+        'recorder.resume' => _interactionRecorder.resume(
+          app.handle,
+          requestTimeout: requestTimeout,
+        ),
+        'recorder.stop' => _interactionRecorder.stop(
+          app.handle,
+          requestTimeout: requestTimeout,
+        ),
+        'recorder.get' => _interactionRecorder.session(
+          app.handle,
+          requestTimeout: requestTimeout,
+        ),
+        'recorder.steps' => _interactionRecorder.steps(
+          app.handle,
+          after:
+              pair.input.optionalInteger(
+                'after',
+                minimum: 0,
+                maximum: 1000000,
+              ) ??
+              0,
+          requestTimeout: requestTimeout,
+        ),
+        _ => _interactionRecorder.export(
+          app.handle,
+          requestTimeout: requestTimeout,
+        ),
+      },
+    );
+    return _sanitize(result, pair.binding, sanitizer);
   }
 
   Future<Map<String, Object?>> _stopRecordingOperation(

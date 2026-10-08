@@ -30,7 +30,9 @@ final class CockpitRecordCommand extends Command<int> {
   @override
   String get description =>
       'Record in-app interactions on the live development app and export them '
-      'as a Cockpit case.';
+      'as a Cockpit case. Targets the development session through the '
+      'supervisor by default; pass --endpoint to dial a self-managed app '
+      'directly.';
 }
 
 void _addRecorderTargetOptions(ArgParser parser) {
@@ -38,7 +40,8 @@ void _addRecorderTargetOptions(ArgParser parser) {
   parser.addOption(
     'endpoint',
     help:
-        'App remote-session base URL, for apps launched outside a development '
+        'Connect directly to this app remote-session base URL instead of the '
+        'development session; only for apps launched outside a managed '
         'session.',
   );
 }

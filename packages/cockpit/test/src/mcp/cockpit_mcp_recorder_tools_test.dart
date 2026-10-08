@@ -20,8 +20,8 @@ import 'package:yaml/yaml.dart';
 
 /// Wire-level coverage for the recorder MCP tools: a real
 /// [CockpitSupervisorApiClient] negotiates with an in-process supervisor stub
-/// whose `session.development.get` reports the bridge of an in-process fake
-/// app, mirroring the `cockpit dev start` integration harness.
+/// whose `recorder.*` operations proxy to an in-process fake app, mirroring
+/// the worker's recorder proxy end to end.
 void main() {
   test(
     'recorder tools advertise read/write annotations and strict schemas',
@@ -226,7 +226,14 @@ void main() {
     final stopped = await call('recorder_stop');
     expect((stopped['session']! as Map<String, Object?>)['phase'], 'stopped');
     expect(stopped['steps'], hasLength(_RecorderAppServer.stepCount));
-    expect(harness.supervisor.developmentQueries, isNotEmpty);
+    // Every tool call crossed the supervisor as one recorder operation
+    // carrying the session scope.
+    expect(harness.supervisor.recorderCalls, hasLength(7));
+    for (final (kind, input) in harness.supervisor.recorderCalls) {
+      expect(kind, startsWith('recorder.'));
+      expect(input['sessionId'], 'session-1', reason: kind);
+    }
+    expect(harness.app.requestCount, greaterThan(0));
   });
 
   test('recorder tools answer the idle session and default cursor', () async {
@@ -259,7 +266,7 @@ void main() {
     expect(harness.app.stepsQueries, const <String>['0']);
   });
 
-  test('recorder tools map resolution failures to MCP errors', () async {
+  test('recorder tools map operation failures to MCP errors', () async {
     final harness = await _Harness.create();
     addTearDown(harness.dispose);
     final tools = <String, CockpitMcpTool>{
@@ -271,54 +278,8 @@ void main() {
       'sessionId': 'session-1',
     };
 
-    harness.supervisor.failDevelopmentGet = true;
-    await expectLater(
-      tools['recorder_start']!.call(arguments),
-      throwsA(
-        isA<CockpitMcpError>()
-            .having((error) => error.code, 'code', -32000)
-            .having(
-              (error) => error.message,
-              'message',
-              contains('could not be queried'),
-            ),
-      ),
-    );
-
-    // A query that never finished (still running, no outcome, no failure
-    // payload) keeps the same error class with the bare message.
-    harness.supervisor.pendingDevelopmentGet = true;
-    harness.supervisor.failDevelopmentGet = false;
-    await expectLater(
-      tools['recorder_pause']!.call(arguments),
-      throwsA(
-        isA<CockpitMcpError>()
-            .having((error) => error.code, 'code', -32000)
-            .having(
-              (error) => error.message,
-              'message',
-              'Development session session-1 could not be queried.',
-            ),
-      ),
-    );
-    harness.supervisor.pendingDevelopmentGet = false;
-
-    harness.supervisor.bridgeReady = false;
-    await expectLater(
-      tools['recorder_status']!.call(arguments),
-      throwsA(
-        isA<CockpitMcpError>()
-            .having((error) => error.code, 'code', -32000)
-            .having(
-              (error) => error.data,
-              'data',
-              containsPair('apiCode', 'developmentSessionBridgeUnavailable'),
-            ),
-      ),
-    );
-
-    // App-side failures keep their envelope code through the MCP boundary.
-    harness.supervisor.bridgeReady = true;
+    // A failed operation keeps the worker-reported error code through the MCP
+    // boundary, with the session named in the message.
     harness.app.failPause = true;
     await expectLater(
       tools['recorder_pause']!.call(arguments),
@@ -333,10 +294,28 @@ void main() {
             .having(
               (error) => error.message,
               'message',
-              contains('Cannot pause'),
+              allOf(contains('session-1'), contains('Cannot pause')),
             ),
       ),
     );
+
+    // A result that never finished (still running, no outcome, no failure
+    // payload) keeps the same error class with the bare message.
+    harness.supervisor.pendingRecorderOperation = true;
+    harness.app.failPause = false;
+    await expectLater(
+      tools['recorder_pause']!.call(arguments),
+      throwsA(
+        isA<CockpitMcpError>()
+            .having((error) => error.code, 'code', -32000)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('did not complete'),
+            ),
+      ),
+    );
+    harness.supervisor.pendingRecorderOperation = false;
 
     // Wrong-typed and unknown tool arguments are invalid-argument errors.
     await expectLater(
@@ -450,7 +429,8 @@ final class _Harness {
   }
 }
 
-/// Serves the `session.development.get` v2 REST surface for one workspace.
+/// Serves the workspace-operation v2 REST surface for one workspace, proxying
+/// every `recorder.*` operation to one fake app the way the worker does.
 final class _SupervisorStub {
   _SupervisorStub._(this._server)
     : bearerToken = 'mcp-recorder-wire-token-0123456789abcdef';
@@ -460,15 +440,13 @@ final class _SupervisorStub {
   final HttpServer _server;
   final String bearerToken;
 
-  /// Whether `session.development.get` answers a ready bridge.
-  bool bridgeReady = true;
-  bool failDevelopmentGet = false;
+  /// Answers every `recorder.*` operation with a still-running result (no
+  /// outcome, no failure), exercising the bare did-not-complete message.
+  bool pendingRecorderOperation = false;
 
-  /// Answers with a still-running operation (no outcome, no failure),
-  /// exercising the bare resolution-failure message.
-  bool pendingDevelopmentGet = false;
-  final List<Map<String, Object?>> developmentQueries =
-      <Map<String, Object?>>[];
+  /// Every recorder operation the stub received, as (kind, input) pairs.
+  final List<(String, Map<String, Object?>)> recorderCalls =
+      <(String, Map<String, Object?>)>[];
 
   Uri get endpoint => Uri.parse('http://127.0.0.1:${_server.port}');
 
@@ -490,7 +468,7 @@ final class _SupervisorStub {
       final body = text.isEmpty
           ? null
           : jsonDecode(text) as Map<Object?, Object?>;
-      final outcome = _route(request.method, request.uri.path, body);
+      final outcome = await _route(request.method, request.uri.path, body);
       response.statusCode = HttpStatus.ok;
       response.headers.contentType = ContentType.json;
       response.write(jsonEncode(outcome));
@@ -500,11 +478,11 @@ final class _SupervisorStub {
     await response.close();
   }
 
-  Map<String, Object?> _route(
+  Future<Object?> _route(
     String method,
     String path,
     Map<Object?, Object?>? body,
-  ) {
+  ) async {
     if (method == 'GET' &&
         (path == '/_cockpit/health' || path == '/api/v2/server')) {
       return _serverInfo();
@@ -514,7 +492,12 @@ final class _SupervisorStub {
     ).firstMatch(path);
     if (workspaceMatch != null) {
       if (method == 'GET') return _page(_descriptors());
-      if (method == 'POST') return _execute(body).toJson();
+      if (method == 'POST') {
+        final kind = body?['kind'];
+        if (kind is String && kind.startsWith('recorder.')) {
+          return (await _recorderResult(kind, body!['input'])).toJson();
+        }
+      }
     }
     throw StateError('Unexpected supervisor request $method $path');
   }
@@ -536,68 +519,106 @@ final class _SupervisorStub {
       .map((descriptor) => descriptor.toJson())
       .toList(growable: false);
 
-  CockpitOperationResult _execute(Map<Object?, Object?>? body) {
-    final input = body?['input'];
-    final wireInput = input is Map<Object?, Object?>
-        ? Map<String, Object?>.from(input)
+  /// Proxies one `recorder.*` operation to the fake app and wraps its answer
+  /// in a succeeded operation result, mirroring the worker's proxy.
+  Future<CockpitOperationResult> _recorderResult(
+    String kind,
+    Object? rawInput,
+  ) async {
+    final input = rawInput is Map<Object?, Object?>
+        ? Map<String, Object?>.from(rawInput)
         : const <String, Object?>{};
-    developmentQueries.add(wireInput);
+    recorderCalls.add((kind, input));
     final now = DateTime.now().toUtc();
-    if (pendingDevelopmentGet) {
+    if (pendingRecorderOperation) {
       return CockpitOperationResult(
-        operationId: 'operation-development-get',
-        kind: 'session.development.get',
+        operationId: 'operation-$kind',
+        kind: kind,
         lifecycle: CockpitOperationLifecycle.running,
         submittedAt: now,
         startedAt: now,
         workspaceId: 'workspace-1',
       );
     }
-    if (failDevelopmentGet) {
+    final (method, target, body) = switch (kind) {
+      'recorder.start' => (
+        'POST',
+        _appUrl.replace(path: '/recorder/start'),
+        jsonEncode(<String, Object?>{'name': ?input['name']}),
+      ),
+      'recorder.pause' => (
+        'POST',
+        _appUrl.replace(path: '/recorder/pause'),
+        null,
+      ),
+      'recorder.resume' => (
+        'POST',
+        _appUrl.replace(path: '/recorder/resume'),
+        null,
+      ),
+      'recorder.stop' => (
+        'POST',
+        _appUrl.replace(path: '/recorder/stop'),
+        null,
+      ),
+      'recorder.get' => (
+        'GET',
+        _appUrl.replace(path: '/recorder/session'),
+        null,
+      ),
+      'recorder.steps' => (
+        'GET',
+        _appUrl.replace(
+          path: '/recorder/steps',
+          queryParameters: <String, String>{'after': '${input['after'] ?? 0}'},
+        ),
+        null,
+      ),
+      _ => ('GET', _appUrl.replace(path: '/recorder/export'), null),
+    };
+    final client = HttpClient();
+    try {
+      final request = await client.openUrl(method, target);
+      request.headers.contentType = ContentType.json;
+      if (body != null) request.write(body);
+      final response = await request.close();
+      final payload = jsonDecode(await utf8.decoder.bind(response).join());
+      if (response.statusCode != HttpStatus.ok) {
+        final error = payload as Map<Object?, Object?>;
+        return CockpitOperationResult(
+          operationId: 'operation-$kind',
+          kind: kind,
+          lifecycle: CockpitOperationLifecycle.completed,
+          submittedAt: now,
+          startedAt: now,
+          finishedAt: now,
+          outcome: CockpitOperationOutcome.failed,
+          workspaceId: 'workspace-1',
+          failure: CockpitFailure(
+            primary: CockpitApiError(
+              code: error['error']! as String,
+              category: CockpitErrorCategory.application,
+              message: error['message']! as String,
+              retryable: false,
+              responsibleLayer: CockpitResponsibleLayer.application,
+            ),
+          ),
+        );
+      }
       return CockpitOperationResult(
-        operationId: 'operation-development-get',
-        kind: 'session.development.get',
+        operationId: 'operation-$kind',
+        kind: kind,
         lifecycle: CockpitOperationLifecycle.completed,
         submittedAt: now,
         startedAt: now,
         finishedAt: now,
-        outcome: CockpitOperationOutcome.failed,
+        outcome: CockpitOperationOutcome.succeeded,
         workspaceId: 'workspace-1',
-        failure: CockpitFailure(
-          primary: CockpitApiError(
-            code: 'developmentSessionUnavailable',
-            category: CockpitErrorCategory.environment,
-            message: 'The development session is gone.',
-            retryable: true,
-            responsibleLayer: CockpitResponsibleLayer.supervisor,
-          ),
-        ),
+        output: Map<String, Object?>.from(payload as Map<Object?, Object?>),
       );
+    } finally {
+      client.close(force: true);
     }
-    return CockpitOperationResult(
-      operationId: 'operation-development-get',
-      kind: 'session.development.get',
-      lifecycle: CockpitOperationLifecycle.completed,
-      submittedAt: now,
-      startedAt: now,
-      finishedAt: now,
-      outcome: CockpitOperationOutcome.succeeded,
-      workspaceId: 'workspace-1',
-      output: <String, Object?>{
-        'sessionId': 'session-1',
-        'targetId': 'target-1',
-        'appId': 'app-1',
-        'status': <String, Object?>{
-          'state': bridgeReady ? 'ready' : 'connecting',
-          'appReachable': true,
-          'remoteSessionReachable': bridgeReady,
-        },
-        if (bridgeReady)
-          'runtime': <String, Object?>{
-            'bridge': <String, Object?>{'baseUrl': _appUrl.toString()},
-          },
-      },
-    );
   }
 }
 
@@ -610,6 +631,7 @@ final class _RecorderAppServer {
   final HttpServer _server;
   final List<Map<String, Object?>> startBodies = <Map<String, Object?>>[];
   final List<String> stepsQueries = <String>[];
+  int requestCount = 0;
 
   /// While true the app answers the cold-app payloads: idle session and the
   /// server error a pause from idle raises.
@@ -630,6 +652,7 @@ final class _RecorderAppServer {
   Future<void> close() => _server.close(force: true);
 
   void _handle(HttpRequest request) async {
+    requestCount++;
     request.response.headers.contentType = ContentType.json;
     switch ((request.method, request.uri.path)) {
       case ('POST', '/recorder/start'):

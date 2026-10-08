@@ -606,6 +606,22 @@ final Map<String, Map<String, Object?>> _applicationRequestSchemas =
         properties: const <String, Object?>{'recordingId': _id},
         required: const <String>['recordingId'],
       ),
+      'recorder.start': _sessionRequest(
+        properties: <String, Object?>{'name': _boundedString(256)},
+      ),
+      for (final kind in const <String>[
+        'recorder.pause',
+        'recorder.resume',
+        'recorder.stop',
+        'recorder.get',
+        'recorder.export',
+      ])
+        kind: _sessionRequest(),
+      'recorder.steps': _sessionRequest(
+        properties: <String, Object?>{
+          'after': _boundedInteger(0, 1000000, value: 0),
+        },
+      ),
     };
 
 Map<String, Object?> _launchRequest({bool allowMode = false}) => _object(

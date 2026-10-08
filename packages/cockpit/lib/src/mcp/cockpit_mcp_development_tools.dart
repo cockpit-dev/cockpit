@@ -4,10 +4,10 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_interaction_recording_service.dart';
+import '../foundation/cockpit_ids.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
 import 'cockpit_mcp_api_tool.dart';
-import 'cockpit_mcp_error.dart';
 import 'cockpit_mcp_tool.dart';
 
 List<CockpitMcpTool> cockpitMcpDevelopmentTools(
@@ -433,10 +433,16 @@ List<CockpitMcpTool> _recorderTools(CockpitMcpClientProvider client) {
     ),
     action: (api, arguments) async {
       _only(arguments, <String>{'workspaceId', 'sessionId', ...inputKeys});
-      final service = await _recordingService(
-        api,
-        workspaceId: _requiredString(arguments, 'workspaceId'),
-        sessionId: _requiredString(arguments, 'sessionId'),
+      final workspaceId = _requiredString(arguments, 'workspaceId');
+      final sessionId = _requiredString(arguments, 'sessionId');
+      final service = CockpitInteractionRecordingService.forOperations(
+        execute: (kind, input) => _executeRecorderOperation(
+          api,
+          workspaceId: workspaceId,
+          kind: kind,
+          input: input,
+        ),
+        sessionId: sessionId,
       );
       return run(service, arguments);
     },
@@ -504,37 +510,26 @@ List<CockpitMcpTool> _recorderTools(CockpitMcpClientProvider client) {
   ];
 }
 
-/// Resolves the recorder endpoint of a development session through the
-/// supervisor, sharing the CLI's bridge discovery (`session.development.get`).
-Future<CockpitInteractionRecordingService> _recordingService(
+/// Executes one `recorder.*` workspace operation for the recorder tools: the
+/// workspace worker owns the app endpoint and proxies the call, so no bridge
+/// address is ever resolved here. Every call carries a fresh idempotency key
+/// (mutating operations require one; read-only operations accept it) and uses
+/// the client's request timeout.
+Future<CockpitOperationResult> _executeRecorderOperation(
   CockpitSupervisorApiClient api, {
   required String workspaceId,
-  required String sessionId,
-}) async {
-  final result = await api.executeOperation(
-    CockpitOperationInvocation(
-      kind: 'session.development.get',
-      workspaceId: workspaceId,
-      input: <String, Object?>{'sessionId': sessionId},
-      deadline: DateTime.now().toUtc().add(const Duration(seconds: 30)),
+  required String kind,
+  required Map<String, Object?> input,
+}) => api.executeOperation(
+  CockpitOperationInvocation(
+    kind: kind,
+    workspaceId: workspaceId,
+    input: input,
+    idempotencyKey: CockpitIdempotencyKey(
+      CockpitSecureTokenGenerator().nextResourceId('c'),
     ),
-  );
-  final succeeded =
-      result.lifecycle == CockpitOperationLifecycle.completed &&
-      result.outcome == CockpitOperationOutcome.succeeded;
-  if (!succeeded) {
-    final failure = result.failure;
-    throw CockpitMcpError.internal(
-      failure == null
-          ? 'Development session $sessionId could not be queried.'
-          : 'Development session $sessionId could not be queried: '
-                '${failure.primary.code} ${failure.primary.message}',
-    );
-  }
-  return CockpitInteractionRecordingService.forBaseUri(
-    cockpitInteractionRecorderBaseUri(result.output),
-  );
-}
+  ),
+);
 
 CockpitMcpApiTool _operationTool({
   required CockpitMcpClientProvider client,

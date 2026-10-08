@@ -14,7 +14,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Records live app interactions of one monitored session into a replayable
-/// case: connection to the session's recorder endpoint, live timeline,
+/// case: recorder connection through the supervisor, live timeline,
 /// controls, and export preview.
 final class RecorderScreen extends ConsumerStatefulWidget {
   const RecorderScreen({super.key});
@@ -85,9 +85,9 @@ final class _RecorderScreenState extends ConsumerState<RecorderScreen> {
                 )
               : const Icon(LucideIcons.refreshCw, size: 14),
           label: Text(
-            state.endpoint == null
-                ? context.t.recorder.connect
-                : context.t.recorder.recheck,
+            state.connected
+                ? context.t.recorder.recheck
+                : context.t.recorder.connect,
           ),
         ),
       ],

@@ -3,63 +3,36 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_application_service_exception.dart';
 
-/// Extracts the live remote-session endpoint of a development session from a
-/// `session.development.get` operation output.
-///
-/// Both the `record` CLI command group and the recorder MCP tools resolve
-/// their target app through this single function, so a session is proven
-/// ready and its bridge base URL is read exactly once per surface.
-Uri cockpitInteractionRecorderBaseUri(Map<String, Object?>? output) {
-  final status = output?['status'];
-  final statusMap = status is Map<Object?, Object?> ? status : null;
-  final runtimeIdentity = output?['runtime'];
-  final bridge = runtimeIdentity is Map<Object?, Object?>
-      ? runtimeIdentity['bridge']
-      : null;
-  final baseUrl = bridge is Map<Object?, Object?> ? bridge['baseUrl'] : null;
-  final ready =
-      statusMap?['state'] == 'ready' &&
-      statusMap?['appReachable'] == true &&
-      statusMap?['remoteSessionReachable'] == true;
-  final rawState = statusMap?['state'];
-  final state = rawState is String ? rawState : null;
-  if (!ready || baseUrl is! String || baseUrl.isEmpty) {
-    throw _bridgeUnavailable(state: state);
-  }
-  final Uri baseUri;
-  try {
-    baseUri = Uri.parse(baseUrl);
-  } on FormatException {
-    throw _bridgeUnavailable(state: state, baseUrl: baseUrl);
-  }
-  final httpScheme = baseUri.scheme == 'http' || baseUri.scheme == 'https';
-  if (!httpScheme || baseUri.host.isEmpty) {
-    throw _bridgeUnavailable(state: state, baseUrl: baseUrl);
-  }
-  return baseUri;
-}
+/// Executes one `recorder.*` supervisor operation with the session-scoped
+/// input the interaction recording service assembled.
+typedef CockpitInteractionRecorderOperation =
+    Future<CockpitOperationResult> Function(
+      String kind,
+      Map<String, Object?> input,
+    );
 
-CockpitApplicationServiceException _bridgeUnavailable({
-  String? state,
-  String? baseUrl,
-}) => CockpitApplicationServiceException(
-  code: 'developmentSessionBridgeUnavailable',
-  message:
-      'The development session has no ready remote bridge; run '
-      '`cockpit dev start` and retry.',
-  details: <String, Object?>{'state': ?state, 'baseUrl': ?baseUrl},
-);
-
-/// Drives the interaction recorder on one resolved live session and returns
+/// Drives the interaction recorder on one resolved session and returns the
 /// printable payload maps shared by every external surface.
+///
+/// Supervised sessions use the operation mode ([CockpitInteractionRecordingService.forOperations]):
+/// every call executes the matching `recorder.*` supervisor operation, which
+/// the workspace worker proxies to the app's recorder endpoints — the app's
+/// bridge address never leaves the worker. `forBaseUri` keeps a
+/// direct-connection mode for apps launched outside a managed session
+/// (`cockpit record --endpoint`).
 final class CockpitInteractionRecordingService {
-  CockpitInteractionRecordingService(this._client);
+  CockpitInteractionRecordingService.forOperations({
+    required CockpitInteractionRecorderOperation execute,
+    required String sessionId,
+  }) : _execute = execute,
+       _sessionId = sessionId,
+       _client = null;
 
   factory CockpitInteractionRecordingService.forBaseUri(
     Uri baseUri, {
     String authToken = '',
     Duration requestTimeout = const Duration(seconds: 30),
-  }) => CockpitInteractionRecordingService(
+  }) => CockpitInteractionRecordingService._direct(
     CockpitRemoteSessionClient(
       baseUri: baseUri,
       authToken: authToken,
@@ -67,38 +40,85 @@ final class CockpitInteractionRecordingService {
     ),
   );
 
-  final CockpitRemoteSessionClient _client;
+  CockpitInteractionRecordingService._direct(CockpitRemoteSessionClient client)
+    : _execute = null,
+      _sessionId = null,
+      _client = client;
 
-  Future<Map<String, Object?>> start({String? name}) async =>
-      (await _client.startInteractionRecording(name: name)).toJson();
+  final CockpitInteractionRecorderOperation? _execute;
+  final String? _sessionId;
+  final CockpitRemoteSessionClient? _client;
 
-  Future<Map<String, Object?>> pause() async =>
-      (await _client.pauseInteractionRecording()).toJson();
+  Future<Map<String, Object?>> start({String? name}) async {
+    final client = _client;
+    if (client != null) {
+      return (await client.startInteractionRecording(name: name)).toJson();
+    }
+    return _invoke('recorder.start', <String, Object?>{'name': ?name});
+  }
 
-  Future<Map<String, Object?>> resume() async =>
-      (await _client.resumeInteractionRecording()).toJson();
+  Future<Map<String, Object?>> pause() async {
+    final client = _client;
+    if (client != null) {
+      return (await client.pauseInteractionRecording()).toJson();
+    }
+    return _invoke('recorder.pause', const <String, Object?>{});
+  }
 
-  Future<Map<String, Object?>> stop() async =>
-      (await _client.stopInteractionRecording()).toJson();
+  Future<Map<String, Object?>> resume() async {
+    final client = _client;
+    if (client != null) {
+      return (await client.resumeInteractionRecording()).toJson();
+    }
+    return _invoke('recorder.resume', const <String, Object?>{});
+  }
+
+  Future<Map<String, Object?>> stop() async {
+    final client = _client;
+    if (client != null) {
+      return (await client.stopInteractionRecording()).toJson();
+    }
+    return _invoke('recorder.stop', const <String, Object?>{});
+  }
 
   /// Reads the current session, or the minimal idle payload while no session
   /// has started.
   Future<Map<String, Object?>> status() async {
-    final session = await _client.interactionRecordingSession();
-    return session?.toJson() ?? const <String, Object?>{'phase': 'idle'};
+    final client = _client;
+    if (client != null) {
+      final session = await client.interactionRecordingSession();
+      return session?.toJson() ?? const <String, Object?>{'phase': 'idle'};
+    }
+    return _invoke('recorder.get', const <String, Object?>{});
   }
 
   /// Reads the recorded steps after the caller's consumed-step cursor.
   Future<Map<String, Object?>> steps({int after = 0}) async {
-    final drained = await _client.interactionRecordingSteps(after: after);
-    return <String, Object?>{
-      'steps': <Object?>[for (final step in drained.steps) step.toJson()],
-      'total': drained.total,
-    };
+    if (after < 0 || after > 1000000) {
+      throw const FormatException(
+        'Steps cursor after must be between 0 and 1000000.',
+      );
+    }
+    final client = _client;
+    if (client != null) {
+      final drained = await client.interactionRecordingSteps(after: after);
+      return <String, Object?>{
+        'steps': <Object?>[for (final step in drained.steps) step.toJson()],
+        'total': drained.total,
+      };
+    }
+    return _invoke('recorder.steps', <String, Object?>{'after': after});
   }
 
-  Future<CockpitRecordedFlowBundle> export() =>
-      _client.exportInteractionRecording();
+  Future<CockpitRecordedFlowBundle> export() async {
+    final client = _client;
+    if (client != null) {
+      return client.exportInteractionRecording();
+    }
+    return CockpitRecordedFlowBundle.fromJson(
+      await _invoke('recorder.export', const <String, Object?>{}),
+    );
+  }
 
   /// Shapes one exported flow document: the case YAML, or the complete flow
   /// bundle as JSON.
@@ -109,4 +129,28 @@ final class CockpitInteractionRecordingService {
     'format': format,
     'document': format == 'yaml' ? bundle.caseYaml : bundle.toJson(),
   };
+
+  Future<Map<String, Object?>> _invoke(
+    String kind,
+    Map<String, Object?> extra,
+  ) async {
+    final result = await _execute!(kind, <String, Object?>{
+      'sessionId': _sessionId,
+      ...extra,
+    });
+    if (result.lifecycle != CockpitOperationLifecycle.completed ||
+        result.outcome != CockpitOperationOutcome.succeeded) {
+      final failure = result.failure?.primary;
+      throw CockpitApplicationServiceException(
+        code: failure?.code ?? 'recorderOperationFailed',
+        message: failure == null
+            ? 'Interaction recorder operation $kind did not complete for '
+                  'session $_sessionId.'
+            : 'Interaction recorder operation $kind failed for session '
+                  '$_sessionId: ${failure.message}',
+        details: <String, Object?>{'kind': kind},
+      );
+    }
+    return result.output ?? const <String, Object?>{};
+  }
 }

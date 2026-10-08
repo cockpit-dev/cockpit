@@ -37,7 +37,7 @@ void main() {
     await harness.disposeScreen(tester);
   });
 
-  testWidgets('adopts the monitor selection and resolves its endpoint', (
+  testWidgets('adopts the monitor selection and connects its recorder', (
     tester,
   ) async {
     final harness = _RecorderHarness()
@@ -53,7 +53,7 @@ void main() {
 
     final state = harness.container.read(interactionRecorderProvider);
     expect(state.selected, _keyA);
-    expect(state.endpoint, harness.clients[_keyA]!.baseUri);
+    expect(state.connected, isTrue);
     expect(find.text('Recheck'), findsOneWidget); // Connected affordance.
     expect(find.text('Recording'), findsOneWidget); // Phase badge.
     expect(find.text('Recording · 1 step · 1 unresolved'), findsOneWidget);
@@ -139,7 +139,7 @@ void main() {
 
     final state = harness.container.read(interactionRecorderProvider);
     expect(state.selected, _keyB);
-    expect(state.endpoint, harness.clients[_keyB]!.baseUri);
+    expect(state.connected, isTrue);
     expect(harness.connectorCalls(_keyB), 1);
     expect(find.text('Recheck'), findsOneWidget);
 
@@ -397,8 +397,8 @@ final class _RecorderHarness {
   late final ProviderContainer container;
 
   final Map<SessionMonitorKey, _ScreenRecorderClient> clients = {
-    _keyA: _ScreenRecorderClient(Uri.parse('http://127.0.0.1:18441')),
-    _keyB: _ScreenRecorderClient(Uri.parse('http://127.0.0.1:18442')),
+    _keyA: _ScreenRecorderClient(),
+    _keyB: _ScreenRecorderClient(),
   };
 
   final Map<SessionMonitorKey, int> _connectorCalls = {};
@@ -458,11 +458,6 @@ final class _FakeMonitorNotifier extends SessionMonitorNotifier {
 }
 
 final class _ScreenRecorderClient implements InteractionRecorderClient {
-  _ScreenRecorderClient(this.baseUri);
-
-  @override
-  final Uri baseUri;
-
   Map<String, Object?> _status = <String, Object?>{'phase': 'idle'};
 
   List<CockpitInteractionStep> recordedSteps = <CockpitInteractionStep>[];

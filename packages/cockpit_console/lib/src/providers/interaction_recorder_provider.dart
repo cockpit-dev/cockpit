@@ -14,8 +14,6 @@ const Duration interactionRecorderPollInterval = Duration(seconds: 2);
 /// page renders. A console-side seam over [CockpitInteractionRecordingService]
 /// so the page and its tests share one contract.
 abstract interface class InteractionRecorderClient {
-  Uri get baseUri;
-
   Future<Map<String, Object?>> start({String? name});
 
   Future<Map<String, Object?>> pause();
@@ -31,16 +29,35 @@ abstract interface class InteractionRecorderClient {
   Future<String> exportCaseYaml();
 }
 
-/// Production client over the shared application service.
-final class RemoteInteractionRecorderClient
+/// Production client over the shared application service: every call executes
+/// the matching `recorder.*` supervisor operation, which the workspace worker
+/// proxies to the app — the console never resolves an app endpoint.
+final class SupervisorInteractionRecorderClient
     implements InteractionRecorderClient {
-  RemoteInteractionRecorderClient(this.baseUri)
-    : _service = CockpitInteractionRecordingService.forBaseUri(baseUri);
-
-  @override
-  final Uri baseUri;
+  SupervisorInteractionRecorderClient(
+    ConsoleSupervisorClient client,
+    SessionMonitorKey key,
+  ) : _service = CockpitInteractionRecordingService.forOperations(
+        execute: (kind, input) async => CockpitOperationResult.fromJson(
+          await client.executeOperation(
+            kind: kind,
+            workspaceId: key.workspaceId,
+            input: input,
+            idempotencyKey: _nextIdempotencyKey(),
+          ),
+        ),
+        sessionId: key.sessionId,
+      );
 
   final CockpitInteractionRecordingService _service;
+
+  static int _idempotencyCounter = 0;
+
+  /// Mutating recorder operations require an idempotency key; read-only
+  /// operations accept one, so every call carries a fresh unique key.
+  static String _nextIdempotencyKey() =>
+      'console-recorder-${DateTime.now().microsecondsSinceEpoch}-'
+      '${_idempotencyCounter++}';
 
   @override
   Future<Map<String, Object?>> start({String? name}) =>
@@ -67,8 +84,8 @@ final class RemoteInteractionRecorderClient
 }
 
 /// Resolves the recorder client of a development session, mirroring the
-/// `record` CLI: `session.development.get` proves the session ready and the
-/// live bridge base URL is read from its output exactly once.
+/// `record` CLI: the session's `recorder.*` operations are executed through
+/// the supervisor, which proxies them to the app.
 typedef InteractionRecorderConnector =
     Future<InteractionRecorderClient> Function(SessionMonitorKey key);
 
@@ -77,19 +94,7 @@ Future<InteractionRecorderClient> connectInteractionRecorder(
   SessionMonitorKey key,
 ) async {
   final client = await ref.read(supervisorProvider.notifier).ensureClient();
-  final result = await client.executeOperation(
-    kind: 'session.development.get',
-    workspaceId: key.workspaceId,
-    input: <String, Object?>{'sessionId': key.sessionId},
-  );
-  if (result['outcome'] != 'succeeded') {
-    throw StateError(_operationFailure(result));
-  }
-  final output = result['output'];
-  final baseUri = cockpitInteractionRecorderBaseUri(
-    output is Map ? Map<String, Object?>.from(output) : null,
-  );
-  return RemoteInteractionRecorderClient(baseUri);
+  return SupervisorInteractionRecorderClient(client, key);
 }
 
 final interactionRecorderConnectorProvider =
@@ -103,7 +108,7 @@ final interactionRecorderConnectorProvider =
 final class InteractionRecorderState {
   const InteractionRecorderState({
     this.selected,
-    this.endpoint,
+    this.connected = false,
     this.connecting = false,
     this.connectionError,
     this.phase = CockpitRecorderPhase.idle,
@@ -118,7 +123,7 @@ final class InteractionRecorderState {
   });
 
   final SessionMonitorKey? selected;
-  final Uri? endpoint;
+  final bool connected;
   final bool connecting;
   final String? connectionError;
   final CockpitRecorderPhase phase;
@@ -147,7 +152,7 @@ final class InteractionRecorderState {
 
   InteractionRecorderState copyWith({
     SessionMonitorKey? selected,
-    Uri? endpoint,
+    bool? connected,
     bool? connecting,
     Object? connectionError = _unset,
     CockpitRecorderPhase? phase,
@@ -161,7 +166,7 @@ final class InteractionRecorderState {
     Object? document = _unset,
   }) => InteractionRecorderState(
     selected: selected ?? this.selected,
-    endpoint: endpoint ?? this.endpoint,
+    connected: connected ?? this.connected,
     connecting: connecting ?? this.connecting,
     connectionError: connectionError == _unset
         ? this.connectionError
@@ -219,7 +224,7 @@ final class InteractionRecorderNotifier
   }
 
   /// Binds the page to [key], resetting any recording view of the previous
-  /// session, and resolves its live recorder endpoint.
+  /// session, and connects its recorder boundary.
   void select(SessionMonitorKey key) {
     if (key == state.selected && _client != null) return;
     _connectGeneration++;
@@ -230,9 +235,9 @@ final class InteractionRecorderNotifier
     unawaited(connect());
   }
 
-  /// (Re)resolves the endpoint of the selected session. A selection change
+  /// (Re)connects the recorder of the selected session. A selection change
   /// while an attempt is in flight supersedes it: the stale result is
-  /// discarded so the page never adopts another session's endpoint.
+  /// discarded so the page never adopts another session's connection.
   Future<void> connect() async {
     final key = state.selected;
     if (key == null || state.connecting) return;
@@ -246,7 +251,7 @@ final class InteractionRecorderNotifier
       _consumedSessionId = null;
       state = state.copyWith(
         connecting: false,
-        endpoint: client.baseUri,
+        connected: true,
         steps: const <CockpitInteractionStep>[],
         document: null,
       );
@@ -370,17 +375,3 @@ final interactionRecorderProvider =
     NotifierProvider<InteractionRecorderNotifier, InteractionRecorderState>(
       InteractionRecorderNotifier.new,
     );
-
-String _operationFailure(Map<String, Object?> result) {
-  final failure = result['failure'];
-  if (failure is Map) {
-    final primary = failure['primary'];
-    if (primary is Map) {
-      final message = primary['message'];
-      if (message is String && message.isNotEmpty) return message;
-      final code = primary['code'];
-      if (code is String && code.isNotEmpty) return code;
-    }
-  }
-  return '${result['kind'] ?? 'Operation'} failed.';
-}

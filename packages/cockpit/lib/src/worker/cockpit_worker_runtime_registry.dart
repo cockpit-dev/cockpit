@@ -3550,6 +3550,13 @@ const Set<String> _sessionResourceKinds = <String>{
   'ui.waitIdle',
   'viewport.set',
   'recording.start',
+  'recorder.start',
+  'recorder.pause',
+  'recorder.resume',
+  'recorder.stop',
+  'recorder.get',
+  'recorder.steps',
+  'recorder.export',
 };
 
 Map<String, Object?> _encodeProbe(_ProbeBinding binding) => <String, Object?>{

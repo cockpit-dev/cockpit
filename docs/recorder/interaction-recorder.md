@@ -299,37 +299,52 @@ Injected as one optional `recorderProvider` constructor parameter (nullable;
 404 when absent, mirroring how absent capabilities behave today).
 `CockpitRemoteSessionClient` (packages/cockpit) gains matching methods.
 
+The recorder requires the compile-time enable define
+(`FLUTTER_COCKPIT_ENABLE_INTERACTION_RECORDER=true`). Unsupervised hosts pass
+it directly; supervised development sessions enable the recorder with
+`cockpit dev start --enable-interaction-recorder`, which routes the switch
+through the launch configuration to every platform launcher.
+
 ### CLI (`cockpit`)
 
 `cockpit record` command group under `CockpitCommandRunner`, following
 `CockpitLeafCommand` conventions: `record start [--name]`, `record pause`,
 `record resume`, `record stop`, `record status`, `record steps [--after]`,
-`record export [--out <file>] [--output-format yaml|json]` — all resolving
-their target through `session.development.get` exactly like the
-`cockpit dev` commands (shared service:
-`CockpitInteractionRecordingService`), output through
+`record export [--out <file>] [--output-format yaml|json]` — output through
 `runtime.success`/error envelopes. The format flag is `--output-format`
 because every leaf already owns a global `--format` output-encoding option.
+
+By default the group targets the development session through the supervisor:
+after `session.development.get` reconciles the live session, every
+subcommand executes the matching `recorder.*` workspace operation (shared
+service: `CockpitInteractionRecordingService` in operation mode), which the
+workspace worker proxies to the app's recorder endpoints — the app's bridge
+address never leaves the worker. `--endpoint <uri>` bypasses the supervisor
+and dials a self-managed app's recorder directly (the same service in direct
+mode).
 
 ### MCP
 
 `cockpitMcpDevelopmentTools` gains seven tools — `recorder_start`,
 `recorder_pause`, `recorder_resume`, `recorder_stop`, `recorder_status`,
-`recorder_steps`, `recorder_export` — wrapping the same shared service
-(session resolution via `session.development.get`). They are disabled by
-default (`isEnabledByDefault: false`, e2e + session-management categories);
+`recorder_steps`, `recorder_export` — wrapping the same shared service in
+operation mode: each tool takes `workspaceId` + `sessionId` and executes the
+matching `recorder.*` workspace operation through the supervisor, which the
+worker proxies to the app. They are disabled by default
+(`isEnabledByDefault: false`, e2e + session-management categories);
 `recorder_export` returns the case YAML in the response and never writes
 files. An agent can drive a recording session end to end.
 
 ## Console (`cockpit_console`)
 
 A recorder screen (implemented): binds to the console-wide session-monitor
-selection (reusing the session picker), resolves the recorder endpoint
-through the same `session.development.get` → base-uri path as CLI/MCP, and
-provides controls (phase matrix + optional recording name), a live timeline
-(cursor polling), and an export pane (YAML preview, copy, save via the
-console's established `FilePicker.saveFile` flow). Strings are localized
-(en + zh-CN) through the slang workflow.
+selection (reusing the session picker), connects through the supervisor by
+executing the `recorder.*` workspace operations for the selected session
+(worker-proxied, exactly like CLI/MCP), and provides controls (phase matrix +
+optional recording name), a live timeline (cursor polling), and an export
+pane (YAML preview, copy, save via the console's established
+`FilePicker.saveFile` flow). Strings are localized (en + zh-CN) through the
+slang workflow.
 
 ## Testing strategy
 

@@ -7,251 +7,152 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('recorder base-uri resolution reads the ready bridge', () {
-    final uri = cockpitInteractionRecorderBaseUri(const <String, Object?>{
-      'sessionId': 'session-1',
-      'status': <String, Object?>{
-        'state': 'ready',
-        'appReachable': true,
-        'remoteSessionReachable': true,
-      },
-      'runtime': <String, Object?>{
-        'bridge': <String, Object?>{'baseUrl': 'http://127.0.0.1:43117'},
-      },
-    });
-
-    expect(uri, Uri.parse('http://127.0.0.1:43117'));
-  });
-
-  test('recorder base-uri resolution rejects unusable sessions', () {
-    Matcher unavailable() => isA<CockpitApplicationServiceException>()
-        .having(
-          (error) => error.code,
-          'code',
-          'developmentSessionBridgeUnavailable',
-        )
-        .having((error) => error.message, 'message', contains('dev start'));
-
-    expect(
-      () => cockpitInteractionRecorderBaseUri(null),
-      throwsA(unavailable()),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(<String, Object?>{
-        'status': <String, Object?>{
-          'state': 'connecting',
-          'appReachable': true,
-          'remoteSessionReachable': false,
+  test(
+    'interaction recording service executes recorder operations for supervised sessions',
+    () async {
+      final session = CockpitInteractionRecordingSession(
+        sessionId: 'r1',
+        phase: CockpitRecorderPhase.recording,
+        startedAt: DateTime.utc(2026, 10, 7, 9),
+        stepCount: 2,
+      ).toJson();
+      final calls = <(String, Map<String, Object?>)>[];
+      final service = CockpitInteractionRecordingService.forOperations(
+        sessionId: 'session-1',
+        execute: (kind, input) async {
+          calls.add((kind, input));
+          return _succeeded(kind, switch (kind) {
+            'recorder.steps' => const <String, Object?>{
+              'steps': <Object?>[],
+              'total': 2,
+            },
+            'recorder.export' => <String, Object?>{
+              'session': session,
+              'steps': const <Object?>[],
+              'caseDocument': const <String, Object?>{
+                'id': 'recorded-r1',
+                'schemaVersion': 'cockpit.test/v2',
+              },
+              'caseYaml': 'schemaVersion: cockpit.test/v2\nid: recorded-r1\n',
+            },
+            _ => session,
+          });
         },
-        'runtime': <String, Object?>{
-          'bridge': <String, Object?>{'baseUrl': 'http://127.0.0.1:43117'},
-        },
-      }),
-      throwsA(
-        isA<CockpitApplicationServiceException>()
-            .having(
-              (error) => error.code,
-              'code',
-              'developmentSessionBridgeUnavailable',
-            )
-            .having(
-              (error) => error.details,
-              'details',
-              containsPair('state', 'connecting'),
-            ),
-      ),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(<String, Object?>{
-        'status': <String, Object?>{
-          'state': 'ready',
-          'appReachable': true,
-          'remoteSessionReachable': true,
-        },
-      }),
-      throwsA(unavailable()),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(<String, Object?>{
-        'status': <String, Object?>{
-          'state': 'ready',
-          'appReachable': true,
-          'remoteSessionReachable': true,
-        },
-        'runtime': <String, Object?>{
-          'bridge': <String, Object?>{'baseUrl': ''},
-        },
-      }),
-      throwsA(unavailable()),
-    );
-  });
+      );
 
-  test('recorder base-uri resolution rejects every malformed output shape', () {
-    // A ready status so only the shape under test can flip the verdict.
-    Map<String, Object?> readyStatus({
-      Object? state = 'ready',
-      Object? appReachable = true,
-      Object? remoteSessionReachable = true,
-    }) => <String, Object?>{
-      'state': state,
-      'appReachable': appReachable,
-      'remoteSessionReachable': remoteSessionReachable,
-    };
-    Map<String, Object?> output({
-      Object? status,
-      Object? runtime,
-      Object? bridge,
-      Object? baseUrl,
-    }) => <String, Object?>{
-      'status': ?status,
-      'runtime': ?runtime,
-      if (bridge != null)
-        'runtime': <String, Object?>{'bridge': bridge}
-      else if (baseUrl != null)
-        'runtime': <String, Object?>{
-          'bridge': <String, Object?>{'baseUrl': baseUrl},
-        },
-    };
+      expect((await service.start(name: 'checkout flow'))['sessionId'], 'r1');
+      await service.pause();
+      await service.resume();
+      expect((await service.status())['phase'], 'recording');
+      expect((await service.steps(after: 2))['total'], 2);
+      expect((await service.export()).caseYaml, contains('id: recorded-r1'));
+      await service.stop();
 
-    Matcher unavailableWith(Map<String, Object?> details) =>
-        isA<CockpitApplicationServiceException>()
-            .having(
-              (error) => error.code,
-              'code',
-              'developmentSessionBridgeUnavailable',
-            )
-            .having((error) => error.details, 'details', details);
-
-    // The status block itself is malformed or reports an unusable session.
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: 'ready', baseUrl: 'http://127.0.0.1:43117'),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: <Object?>[readyStatus()], baseUrl: 'http://127.0.0.1'),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(
-          status: <String, Object?>{
-            'state': 7,
-            'appReachable': true,
-            'remoteSessionReachable': true,
-          },
-          baseUrl: 'http://127.0.0.1:43117',
-        ),
-      ),
-      throwsA(
-        unavailableWith(const <String, Object?>{}),
-      ), // non-string state never leaks into details
-    );
-
-    // Ready-but-unreachable combinations, one flag at a time.
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(
-          status: readyStatus(appReachable: false),
-          baseUrl: 'http://127.0.0.1:43117',
-        ),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(
-          status: readyStatus(remoteSessionReachable: false),
-          baseUrl: 'http://127.0.0.1:43117',
-        ),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-
-    // The runtime/bridge/baseUrl chain is malformed at each link.
-    expect(
-      () => cockpitInteractionRecorderBaseUri(output(status: readyStatus())),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: readyStatus(), runtime: 'flutter'),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: readyStatus(), bridge: 'http://127.0.0.1:43117'),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: readyStatus(), baseUrl: 43117),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-    expect(
-      () => cockpitInteractionRecorderBaseUri(
-        output(status: readyStatus(), baseUrl: <String, Object?>{}),
-      ),
-      throwsA(unavailableWith(const <String, Object?>{'state': 'ready'})),
-    );
-  });
+      expect(calls.map((call) => call.$1), const <String>[
+        'recorder.start',
+        'recorder.pause',
+        'recorder.resume',
+        'recorder.get',
+        'recorder.steps',
+        'recorder.export',
+        'recorder.stop',
+      ]);
+      // Every operation is session-scoped; optional inputs only travel when
+      // they carry a value.
+      for (final call in calls) {
+        expect(call.$2['sessionId'], 'session-1', reason: call.$1);
+      }
+      expect(calls.first.$2, <String, Object?>{
+        'sessionId': 'session-1',
+        'name': 'checkout flow',
+      });
+      expect(calls[4].$2, <String, Object?>{
+        'sessionId': 'session-1',
+        'after': 2,
+      });
+      await service.start();
+      expect(calls.last.$2, const <String, Object?>{
+        'sessionId': 'session-1',
+      }, reason: 'an unnamed start sends no name key');
+    },
+  );
 
   test(
-    'recorder base-uri resolution reports a malformed bridge URL as unusable',
-    () {
-      // Regression: a bridge base URL that does not parse, or parses to
-      // something that is not an absolute http(s) URL, must surface the
-      // documented developmentSessionBridgeUnavailable failure instead of a
-      // raw FormatException (which the CLI misreports as invalidInput and the
-      // MCP tools as invalidArguments).
-      Matcher unavailableFor(String baseUrl) =>
+    'interaction recording service surfaces recorder operation failures',
+    () async {
+      var result = _failed(
+        'recorder.pause',
+        'serverError',
+        'Cannot pause while idle.',
+      );
+      final service = CockpitInteractionRecordingService.forOperations(
+        sessionId: 'session-1',
+        execute: (kind, input) async => result,
+      );
+
+      await expectLater(
+        service.pause(),
+        throwsA(
           isA<CockpitApplicationServiceException>()
-              .having(
-                (error) => error.code,
-                'code',
-                'developmentSessionBridgeUnavailable',
-              )
+              .having((error) => error.code, 'code', 'serverError')
               .having(
                 (error) => error.message,
                 'message',
-                contains('dev start'),
+                allOf(
+                  contains('session-1'),
+                  contains('Cannot pause while idle.'),
+                ),
               )
               .having(
                 (error) => error.details,
                 'details',
-                containsPair('baseUrl', baseUrl),
-              );
+                containsPair('kind', 'recorder.pause'),
+              ),
+        ),
+      );
 
-      Map<String, Object?> output(String baseUrl) => <String, Object?>{
-        'status': <String, Object?>{
-          'state': 'ready',
-          'appReachable': true,
-          'remoteSessionReachable': true,
-        },
-        'runtime': <String, Object?>{
-          'bridge': <String, Object?>{'baseUrl': baseUrl},
-        },
-      };
+      // A result that never completed (still running, no outcome, no failure)
+      // fails with the bare did-not-complete message.
+      result = CockpitOperationResult(
+        operationId: 'operation-recorder-get',
+        kind: 'recorder.get',
+        lifecycle: CockpitOperationLifecycle.running,
+        submittedAt: DateTime.now().toUtc(),
+        startedAt: DateTime.now().toUtc(),
+        workspaceId: 'workspace-1',
+      );
+      await expectLater(
+        service.status(),
+        throwsA(
+          isA<CockpitApplicationServiceException>()
+              .having((error) => error.code, 'code', 'recorderOperationFailed')
+              .having(
+                (error) => error.message,
+                'message',
+                contains('did not complete'),
+              ),
+        ),
+      );
+    },
+  );
 
-      for (final baseUrl in const <String>[
-        'http://[::1', // Uri.parse itself fails.
-        ':::', // Uri.parse itself fails.
-        '127.0.0.1:43117', // Parses to a scheme-less relative URI.
-        '/bridge/127.0.0.1:43117', // Parses to a path-only URI.
-        'ftp://127.0.0.1:43117', // Parses, but not an http(s) bridge.
-      ]) {
-        expect(
-          () => cockpitInteractionRecorderBaseUri(output(baseUrl)),
-          throwsA(unavailableFor(baseUrl)),
-          reason: baseUrl,
-        );
-      }
+  test(
+    'interaction recording service validates the steps cursor before invoking',
+    () async {
+      var invoked = false;
+      final service = CockpitInteractionRecordingService.forOperations(
+        sessionId: 'session-1',
+        execute: (kind, input) async {
+          invoked = true;
+          return _succeeded(kind, const <String, Object?>{});
+        },
+      );
+
+      expect(() => service.steps(after: -1), throwsFormatException);
+      expect(() => service.steps(after: 1000001), throwsFormatException);
+      expect(invoked, isFalse);
+      await service.steps();
+      expect(invoked, isTrue);
     },
   );
 
@@ -554,5 +455,43 @@ void main() {
         'recorded-r1',
       );
     },
+  );
+}
+
+CockpitOperationResult _succeeded(String kind, Map<String, Object?> output) {
+  final now = DateTime.now().toUtc();
+  return CockpitOperationResult(
+    operationId: 'operation-$kind',
+    kind: kind,
+    lifecycle: CockpitOperationLifecycle.completed,
+    outcome: CockpitOperationOutcome.succeeded,
+    submittedAt: now,
+    startedAt: now,
+    finishedAt: now,
+    workspaceId: 'workspace-1',
+    output: output,
+  );
+}
+
+CockpitOperationResult _failed(String kind, String code, String message) {
+  final now = DateTime.now().toUtc();
+  return CockpitOperationResult(
+    operationId: 'operation-$kind',
+    kind: kind,
+    lifecycle: CockpitOperationLifecycle.completed,
+    outcome: CockpitOperationOutcome.failed,
+    submittedAt: now,
+    startedAt: now,
+    finishedAt: now,
+    workspaceId: 'workspace-1',
+    failure: CockpitFailure(
+      primary: CockpitApiError(
+        code: code,
+        category: CockpitErrorCategory.application,
+        message: message,
+        retryable: false,
+        responsibleLayer: CockpitResponsibleLayer.application,
+      ),
+    ),
   );
 }

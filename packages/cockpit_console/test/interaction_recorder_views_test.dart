@@ -21,7 +21,7 @@ void main() {
     testWidgets('buttons follow the phase matrix', (tester) async {
       await _pumpControls(
         tester,
-        _state(phase: CockpitRecorderPhase.idle, endpoint: _endpoint),
+        _state(phase: CockpitRecorderPhase.idle, connected: true),
       );
       // idle: start only.
       expect(_isEnabled(tester, 'Start'), isTrue);
@@ -36,7 +36,7 @@ void main() {
         _state(
           phase: CockpitRecorderPhase.recording,
           stepCount: 3,
-          endpoint: _endpoint,
+          connected: true,
         ),
       );
       // recording: pause + stop.
@@ -52,7 +52,7 @@ void main() {
         _state(
           phase: CockpitRecorderPhase.paused,
           unresolvedCount: 2,
-          endpoint: _endpoint,
+          connected: true,
         ),
       );
       // paused: resume + stop.
@@ -63,19 +63,19 @@ void main() {
 
       await _pumpControls(
         tester,
-        _state(phase: CockpitRecorderPhase.stopped, endpoint: _endpoint),
+        _state(phase: CockpitRecorderPhase.stopped, connected: true),
       );
       // stopped: start again.
       expect(_isEnabled(tester, 'Start'), isTrue);
       expect(_isEnabled(tester, 'Stop'), isFalse);
     });
 
-    testWidgets('commands stay disabled without an endpoint or mid-command', (
+    testWidgets('commands stay disabled without a connection or mid-command', (
       tester,
     ) async {
       await _pumpControls(
         tester,
-        _state(phase: CockpitRecorderPhase.recording, endpoint: null),
+        _state(phase: CockpitRecorderPhase.recording, connected: false),
       );
       expect(_isEnabled(tester, 'Pause'), isFalse);
       expect(_isEnabled(tester, 'Stop'), isFalse);
@@ -85,7 +85,7 @@ void main() {
         _state(
           phase: CockpitRecorderPhase.recording,
           commandBusy: true,
-          endpoint: _endpoint,
+          connected: true,
         ),
       );
       expect(_isEnabled(tester, 'Pause'), isFalse);
@@ -100,7 +100,7 @@ void main() {
         tester,
         _state(
           phase: CockpitRecorderPhase.idle,
-          endpoint: _endpoint,
+          connected: true,
           commandError: 'Cannot start while stopped.',
         ),
         onStart: (name) => startedName = name,
@@ -242,7 +242,7 @@ void main() {
         tester,
         _state(
           phase: CockpitRecorderPhase.idle,
-          endpoint: null,
+          connected: false,
           connectionError: 'Bad state: bridge unavailable',
         ),
       );
@@ -260,7 +260,7 @@ void main() {
           phase: CockpitRecorderPhase.recording,
           stepCount: 1,
           unresolvedCount: 1,
-          endpoint: _endpoint,
+          connected: true,
         ),
       );
 
@@ -502,14 +502,14 @@ void main() {
 
 InteractionRecorderState _state({
   required CockpitRecorderPhase phase,
-  Uri? endpoint,
+  bool connected = false,
   int stepCount = 0,
   int unresolvedCount = 0,
   bool commandBusy = false,
   String? commandError,
   String? connectionError,
 }) => InteractionRecorderState(
-  endpoint: endpoint,
+  connected: connected,
   phase: phase,
   stepCount: stepCount,
   unresolvedCount: unresolvedCount,
@@ -518,8 +518,6 @@ InteractionRecorderState _state({
   connectionError: connectionError,
   sessionId: phase == CockpitRecorderPhase.idle ? null : 'r1',
 );
-
-final _endpoint = Uri.parse('http://127.0.0.1:18434');
 
 Future<void> _pumpControls(
   WidgetTester tester,

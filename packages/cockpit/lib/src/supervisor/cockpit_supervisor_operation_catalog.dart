@@ -289,6 +289,29 @@ final class CockpitSupervisorOperationCatalog {
             CockpitOperationScope.workspace,
             effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.recording],
           ),
+          _mutation(
+            'recorder.start',
+            CockpitOperationScope.workspace,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.recording],
+          ),
+          _mutation(
+            'recorder.pause',
+            CockpitOperationScope.workspace,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.recording],
+          ),
+          _mutation(
+            'recorder.resume',
+            CockpitOperationScope.workspace,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.recording],
+          ),
+          _mutation(
+            'recorder.stop',
+            CockpitOperationScope.workspace,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.recording],
+          ),
+          _mutation('recorder.export', CockpitOperationScope.workspace),
+          _read('recorder.get', CockpitOperationScope.workspace),
+          _read('recorder.steps', CockpitOperationScope.workspace),
         ])
           metadata.descriptor.kind: metadata,
       });
@@ -685,5 +708,33 @@ _operationHelp = <String, ({String title, String description})>{
   'recording.stop': (
     title: 'Stop recording',
     description: 'Stop one recording and finalize its artifact metadata.',
+  ),
+  'recorder.start': (
+    title: 'Start interaction recording',
+    description: 'Start the in-app interaction recorder for one exact session.',
+  ),
+  'recorder.pause': (
+    title: 'Pause interaction recording',
+    description: 'Pause the active interaction recording of one session.',
+  ),
+  'recorder.resume': (
+    title: 'Resume interaction recording',
+    description: 'Resume the paused interaction recording of one session.',
+  ),
+  'recorder.stop': (
+    title: 'Stop interaction recording',
+    description: 'Stop the interaction recording and return its final result.',
+  ),
+  'recorder.export': (
+    title: 'Export interaction recording',
+    description: 'Export the recorded interaction flow as a replayable bundle.',
+  ),
+  'recorder.get': (
+    title: 'Get interaction recording',
+    description: 'Read the interaction recording session, or idle.',
+  ),
+  'recorder.steps': (
+    title: 'Read interaction steps',
+    description: 'Read the recorded interaction steps after a cursor.',
   ),
 };

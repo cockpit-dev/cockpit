@@ -1,5 +1,59 @@
 part of 'cockpit_supervisor_operation_schema.dart';
 
+/// Interaction recording session snapshot, as `CockpitInteractionRecordingSession`
+/// encodes it. `recorder.get` additionally answers the minimal
+/// `{"phase":"idle"}` payload before the first start, so only `phase` is
+/// required there.
+const Map<String, Object?> _recorderSessionProperties = <String, Object?>{
+  'sessionId': _id,
+  'phase': _string,
+  'startedAt': _utcTimestamp,
+  'pausedAt': _utcTimestamp,
+  'endedAt': _utcTimestamp,
+  'stepCount': _integer,
+  'unresolvedCount': _integer,
+};
+
+final Map<String, Object?> _recorderSession = _object(
+  properties: _recorderSessionProperties,
+  required: const <String>[
+    'sessionId',
+    'phase',
+    'startedAt',
+    'stepCount',
+    'unresolvedCount',
+  ],
+  precision: 'structural',
+);
+
+Map<String, Object?> _recorderSessionResponse() => _object(
+  properties: _recorderSessionProperties,
+  required: const <String>['phase'],
+  precision: 'structural',
+);
+
+final Map<String, Object?> _recorderStep = _object(
+  properties: <String, Object?>{
+    'stepId': _id,
+    'kind': _string,
+    'locatorCandidates': _array(_jsonObject),
+    'resolvedValue': _string,
+    'scrollDirection': _string,
+    'routeName': _string,
+    'fromRouteName': _string,
+    'positionDx': _integer,
+    'positionDy': _integer,
+    'phase': _string,
+    'unresolved': _boolean,
+    'segments': _stringList,
+    'annotation': _string,
+    'settledAfterMs': _integer,
+    'recordedAt': _utcTimestamp,
+  },
+  required: const <String>['stepId', 'kind', 'phase', 'recordedAt'],
+  precision: 'structural',
+);
+
 final Map<String, Object?> _runAcceptedResponse = _object(
   properties: const <String, Object?>{
     'workspaceId': _id,
@@ -252,4 +306,42 @@ final Map<String, Map<String, Object?>> _responseSchemas =
         'recording.stop',
       ])
         kind: _structuralResponse('$kind result.'),
+      for (final kind in const <String>[
+        'recorder.start',
+        'recorder.pause',
+        'recorder.resume',
+        'recorder.get',
+      ])
+        kind: _recorderSessionResponse(),
+      'recorder.stop': _object(
+        properties: <String, Object?>{
+          'session': _recorderSession,
+          'steps': _array(_recorderStep),
+        },
+        required: const <String>['session', 'steps'],
+        precision: 'structural',
+      ),
+      'recorder.steps': _object(
+        properties: <String, Object?>{
+          'steps': _array(_recorderStep),
+          'total': _integer,
+        },
+        required: const <String>['steps', 'total'],
+        precision: 'structural',
+      ),
+      'recorder.export': _object(
+        properties: <String, Object?>{
+          'session': _recorderSession,
+          'steps': _array(_recorderStep),
+          'caseDocument': _jsonObject,
+          'caseYaml': _string,
+        },
+        required: const <String>[
+          'session',
+          'steps',
+          'caseDocument',
+          'caseYaml',
+        ],
+        precision: 'structural',
+      ),
     };

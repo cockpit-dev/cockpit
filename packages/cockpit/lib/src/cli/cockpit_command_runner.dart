@@ -122,9 +122,7 @@ final class CockpitCommandRunner {
         runtime.error(code: error.code, message: error.message);
         return cockpitUnavailableExitCode;
       case CockpitApplicationServiceException _:
-        final temporary =
-            error.code == 'remoteUnavailable' ||
-            error.code == 'developmentSessionBridgeUnavailable';
+        final temporary = error.code == 'remoteUnavailable';
         runtime.error(
           code: error.code,
           message: error.message,

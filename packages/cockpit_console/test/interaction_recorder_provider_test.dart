@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('connect resolves the endpoint and reports the idle status', () async {
+  test('connect resolves the client and reports the idle status', () async {
     final (container, client) = _container();
 
     container.read(interactionRecorderProvider.notifier).select(_key);
@@ -15,7 +15,7 @@ void main() {
 
     final state = container.read(interactionRecorderProvider);
     expect(state.selected, _key);
-    expect(state.endpoint, client.baseUri);
+    expect(state.connected, isTrue);
     expect(state.phase, CockpitRecorderPhase.idle);
     expect(state.stepCount, 0);
     expect(state.unresolvedCount, 0);
@@ -132,7 +132,7 @@ void main() {
   });
 
   test(
-    'connection failures surface inline and leave the endpoint unset',
+    'connection failures surface inline and leave the session unconnected',
     () async {
       final container = ProviderContainer(
         overrides: [
@@ -147,7 +147,7 @@ void main() {
       await pumpEventQueue();
 
       final state = container.read(interactionRecorderProvider);
-      expect(state.endpoint, isNull);
+      expect(state.connected, isFalse);
       expect(state.connectionError, contains('bridge unavailable'));
     },
   );
@@ -160,7 +160,7 @@ void main() {
 
     notifier.startPolling();
     await tester.pump();
-    expect(client.stepCursors, isEmpty); // No endpoint resolved yet.
+    expect(client.stepCursors, isEmpty); // No session connected yet.
 
     notifier.select(_key);
     await tester.pump();
@@ -199,7 +199,7 @@ void main() {
 
   group('connection lifecycle', () {
     test(
-      'a failed connect can be re-resolved into a working endpoint',
+      'a failed connect can be re-resolved into a working connection',
       () async {
         var attempts = 0;
         final client = _FakeRecorderClient();
@@ -218,12 +218,12 @@ void main() {
         notifier.select(_key);
         await pumpEventQueue();
         var state = container.read(interactionRecorderProvider);
-        expect(state.endpoint, isNull);
+        expect(state.connected, isFalse);
         expect(state.connectionError, contains('bridge unavailable'));
 
         await notifier.connect();
         state = container.read(interactionRecorderProvider);
-        expect(state.endpoint, client.baseUri);
+        expect(state.connected, isTrue);
         expect(state.connectionError, isNull);
         expect(attempts, 2);
       },
@@ -260,8 +260,8 @@ void main() {
       'reselecting the connected session is a no-op, another session rebinds',
       () async {
         final clients = <SessionMonitorKey, _FakeRecorderClient>{
-          _keyA: _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:1')),
-          _keyB: _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:2')),
+          _keyA: _FakeRecorderClient(),
+          _keyB: _FakeRecorderClient(),
         };
         var connectorCalls = 0;
         final container = ProviderContainer(
@@ -297,7 +297,7 @@ void main() {
         await pumpEventQueue();
         state = container.read(interactionRecorderProvider);
         expect(state.selected, _keyB);
-        expect(state.endpoint, clients[_keyB]!.baseUri);
+        expect(state.connected, isTrue);
         expect(state.steps, isEmpty);
         expect(state.sessionId, isNull);
         expect(state.document, isNull);
@@ -308,22 +308,18 @@ void main() {
 
   group('stale async results never leak into a newer selection', () {
     test(
-      'a superseded connect cannot adopt another session endpoint',
+      'a superseded connect cannot adopt another session connection',
       () async {
         final releaseA = Completer<void>();
         var aResolved = false;
-        final clientB = _FakeRecorderClient(
-          uri: Uri.parse('http://127.0.0.1:2'),
-        );
+        final clientB = _FakeRecorderClient();
         final container = ProviderContainer(
           overrides: [
             interactionRecorderConnectorProvider.overrideWithValue((key) async {
               if (key == _keyA) {
                 await releaseA.future;
                 aResolved = true;
-                return _FakeRecorderClient(
-                  uri: Uri.parse('http://127.0.0.1:1'),
-                );
+                return _FakeRecorderClient();
               }
               return clientB;
             }),
@@ -335,23 +331,20 @@ void main() {
         notifier.select(_keyA); // Slow connect for A stays in flight…
         notifier.select(_keyB); // …while B resolves and binds.
         await pumpEventQueue();
-        expect(
-          container.read(interactionRecorderProvider).endpoint,
-          clientB.baseUri,
-        );
+        expect(container.read(interactionRecorderProvider).connected, isTrue);
 
         releaseA.complete(); // A finishes last; it must be discarded.
         await pumpEventQueue();
         final state = container.read(interactionRecorderProvider);
         expect(aResolved, isTrue);
         expect(state.selected, _keyB);
-        expect(state.endpoint, clientB.baseUri);
+        expect(state.connected, isTrue);
       },
     );
 
     test('a superseded poll cannot apply the old session timeline', () async {
-      final clientA = _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:1'));
-      final clientB = _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:2'));
+      final clientA = _FakeRecorderClient();
+      final clientB = _FakeRecorderClient();
       final clients = <SessionMonitorKey, _FakeRecorderClient>{
         _keyA: clientA,
         _keyB: clientB,
@@ -381,10 +374,7 @@ void main() {
 
       notifier.select(_keyB);
       await pumpEventQueue();
-      expect(
-        container.read(interactionRecorderProvider).endpoint,
-        clientB.baseUri,
-      );
+      expect(container.read(interactionRecorderProvider).connected, isTrue);
 
       clientA.statusGate!.complete(); // A's read finishes after the switch.
       await slowPoll;
@@ -398,12 +388,8 @@ void main() {
     test(
       'a superseded export cannot preview the old session document',
       () async {
-        final clientA = _FakeRecorderClient(
-          uri: Uri.parse('http://127.0.0.1:1'),
-        );
-        final clientB = _FakeRecorderClient(
-          uri: Uri.parse('http://127.0.0.1:2'),
-        );
+        final clientA = _FakeRecorderClient();
+        final clientB = _FakeRecorderClient();
         final clients = <SessionMonitorKey, _FakeRecorderClient>{
           _keyA: clientA,
           _keyB: clientB,
@@ -434,8 +420,8 @@ void main() {
     );
 
     test('a superseded command failure stays on its own session', () async {
-      final clientA = _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:1'));
-      final clientB = _FakeRecorderClient(uri: Uri.parse('http://127.0.0.1:2'));
+      final clientA = _FakeRecorderClient();
+      final clientB = _FakeRecorderClient();
       final clients = <SessionMonitorKey, _FakeRecorderClient>{
         _keyA: clientA,
         _keyB: clientB,
@@ -697,7 +683,7 @@ void main() {
       expect(client.commandLog, <String>['start:flow', 'pause']);
     });
 
-    test('commands without an endpoint are dropped', () async {
+    test('commands without a connection are dropped', () async {
       final container = ProviderContainer(
         overrides: [
           interactionRecorderConnectorProvider.overrideWithValue(
@@ -823,15 +809,9 @@ CockpitInteractionStep _step(String id) => CockpitInteractionStep(
   recordedAt: DateTime.utc(2026, 10, 7, 9),
 );
 
-/// In-memory recorder endpoint: scriptable status, drained steps, and
+/// In-memory recorder client: scriptable status, drained steps, and
 /// optional per-command failures and gates.
 final class _FakeRecorderClient implements InteractionRecorderClient {
-  _FakeRecorderClient({Uri? uri})
-    : baseUri = uri ?? Uri.parse('http://127.0.0.1:18434');
-
-  @override
-  final Uri baseUri;
-
   Map<String, Object?> _status = <String, Object?>{'phase': 'idle'};
 
   /// When set, replaces the scripted status payload entirely.

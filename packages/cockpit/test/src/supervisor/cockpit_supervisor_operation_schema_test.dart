@@ -227,6 +227,171 @@ void main() {
     );
   });
 
+  test('recorder operations catalog and schemas match the worker proxy', () {
+    final definitions = Map<String, Object?>.from(
+      CockpitSupervisorOperationSchema.document()[r'$defs']!
+          as Map<Object?, Object?>,
+    );
+    JsonSchema request(String kind) => JsonSchema.create(
+      Map<String, Object?>.from(
+        definitions['$kind.request']! as Map<Object?, Object?>,
+      ),
+    );
+    JsonSchema response(String kind) => JsonSchema.create(
+      Map<String, Object?>.from(
+        definitions['$kind.response']! as Map<Object?, Object?>,
+      ),
+    );
+
+    for (final kind in const <String>[
+      'recorder.start',
+      'recorder.pause',
+      'recorder.resume',
+      'recorder.stop',
+      'recorder.export',
+      'recorder.get',
+      'recorder.steps',
+    ]) {
+      final metadata = CockpitSupervisorOperationCatalog.require(kind);
+      final descriptor = metadata.descriptor;
+      expect(descriptor.scope, CockpitOperationScope.workspace, reason: kind);
+      final readOnly = kind == 'recorder.get' || kind == 'recorder.steps';
+      expect(
+        descriptor.mutationClass,
+        readOnly
+            ? CockpitMutationClass.readOnly
+            : CockpitMutationClass.mutating,
+        reason: kind,
+      );
+      expect(
+        descriptor.idempotency,
+        readOnly
+            ? CockpitIdempotencyBehavior.optional
+            : CockpitIdempotencyBehavior.required,
+        reason: kind,
+      );
+      expect(
+        metadata.requiresExplicitAuthorization,
+        const <String>{
+          'recorder.start',
+          'recorder.pause',
+          'recorder.resume',
+          'recorder.stop',
+        }.contains(kind),
+        reason: kind,
+      );
+      // Every request is session-scoped and rejects unknown inputs.
+      expect(
+        request(
+          kind,
+        ).validate(<String, Object?>{'sessionId': 'session-1'}).isValid,
+        isTrue,
+        reason: kind,
+      );
+      expect(
+        request(kind).validate(const <String, Object?>{}).isValid,
+        isFalse,
+        reason: kind,
+      );
+    }
+
+    // The optional inputs carry exact bounds.
+    final start = request('recorder.start');
+    expect(
+      start.validate(<String, Object?>{
+        'sessionId': 'session-1',
+        'name': 'checkout flow',
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      start.validate(<String, Object?>{
+        'sessionId': 'session-1',
+        'name': 'x' * 257,
+      }).isValid,
+      isFalse,
+    );
+    final steps = request('recorder.steps');
+    expect(
+      steps.validate(<String, Object?>{
+        'sessionId': 'session-1',
+        'after': 0,
+      }).isValid,
+      isTrue,
+    );
+    for (final after in const <Object?>[-1, 1000001, '4']) {
+      expect(
+        steps.validate(<String, Object?>{
+          'sessionId': 'session-1',
+          'after': after,
+        }).isValid,
+        isFalse,
+        reason: 'after=$after',
+      );
+    }
+
+    // The response schemas accept the payloads the worker returns, including
+    // the minimal idle session and the sanitizer's session identity rewrite.
+    const session = <String, Object?>{
+      'sessionId': 'session-1',
+      'phase': 'recording',
+      'startedAt': '2026-10-07T09:00:00.000Z',
+      'pausedAt': '2026-10-07T09:01:00.000Z',
+      'stepCount': 2,
+      'unresolvedCount': 1,
+    };
+    const step = <String, Object?>{
+      'stepId': 's1',
+      'kind': 'tap',
+      'locatorCandidates': <Object?>[
+        <String, Object?>{'kind': 'key', 'selector': '@save', 'score': 4},
+      ],
+      'phase': 'recording',
+      'unresolved': false,
+      'recordedAt': '2026-10-07T09:00:00.000Z',
+    };
+    for (final kind in const <String>[
+      'recorder.start',
+      'recorder.pause',
+      'recorder.resume',
+      'recorder.get',
+    ]) {
+      expect(response(kind).validate(session).isValid, isTrue, reason: kind);
+    }
+    expect(
+      response(
+        'recorder.get',
+      ).validate(const <String, Object?>{'phase': 'idle'}).isValid,
+      isTrue,
+    );
+    expect(
+      response('recorder.stop').validate(const <String, Object?>{
+        'session': session,
+        'steps': <Object?>[step],
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      response('recorder.steps').validate(const <String, Object?>{
+        'steps': <Object?>[step],
+        'total': 2,
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      response('recorder.export').validate(<String, Object?>{
+        'session': session,
+        'steps': const <Object?>[step],
+        'caseDocument': <String, Object?>{
+          'id': 'recorded-r1',
+          'schemaVersion': 'cockpit.test/v2',
+        },
+        'caseYaml': 'schemaVersion: cockpit.test/v2\nid: recorded-r1\n',
+      }).isValid,
+      isTrue,
+    );
+  });
+
   test('system actions select exactly one target identity', () {
     final definitions = Map<String, Object?>.from(
       CockpitSupervisorOperationSchema.document()[r'$defs']!

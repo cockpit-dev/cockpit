@@ -274,6 +274,21 @@ final class CockpitWorkspaceApplicationAdapters {
       CockpitLeaseResourceKind.recording,
       idField: 'recordingId',
     ),
+    for (final kind in const <String>[
+      'recorder.start',
+      'recorder.pause',
+      'recorder.resume',
+      'recorder.stop',
+      'recorder.export',
+    ])
+      _OperationSpec.mutate(
+        kind,
+        'workspace.sessions',
+        CockpitLeaseResourceKind.session,
+        idField: 'sessionId',
+      ),
+    for (final kind in const <String>['recorder.get', 'recorder.steps'])
+      _OperationSpec.read(kind, 'workspace.sessions', idField: 'sessionId'),
   ].map(_adapter).toList(growable: false);
 
   CockpitWorkspaceOperationAdapter _adapter(_OperationSpec spec) =>

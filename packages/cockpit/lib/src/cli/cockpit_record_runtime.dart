@@ -2,13 +2,15 @@ import '../application/cockpit_interaction_recording_service.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_dev_runtime.dart';
 
-/// Resolves the live app endpoint behind the `record` command group.
+/// Resolves the interaction recorder service behind the `record` command
+/// group.
 ///
 /// Session resolution mirrors `cockpit dev` exactly: the bound CLI session
 /// handle is reconciled through the supervisor `session.development.get`
-/// operation and the live remote bridge base URL is read from its output, so
-/// no second discovery path exists. `--endpoint` bypasses discovery for apps
-/// launched outside a development session.
+/// operation, then every recorder call executes the matching `recorder.*`
+/// workspace operation, which the worker proxies to the app — the app's
+/// bridge address never leaves the worker. `--endpoint` bypasses the
+/// supervisor for apps launched outside a development session.
 final class CockpitRecordRuntime {
   CockpitRecordRuntime(this.runtime, this.dev);
 
@@ -61,10 +63,9 @@ final class CockpitRecordRuntime {
     }
     final resolved = read.session;
     return (
-      CockpitInteractionRecordingService.forBaseUri(
-        cockpitInteractionRecorderBaseUri(result.output),
-        authToken: resolved.authenticationEnabled ? resolved.authToken : '',
-        requestTimeout: runtime.operationTimeout,
+      CockpitInteractionRecordingService.forOperations(
+        execute: (kind, input) => dev.invoke(resolved, kind, input),
+        sessionId: resolved.sessionId,
       ),
       cockpitSuccessExitCode,
     );
