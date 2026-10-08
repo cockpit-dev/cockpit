@@ -89,6 +89,8 @@ final class CockpitLinuxRemoteSessionLauncher
             flutterVersion: flutterVersion,
             launchId: options.launchId,
             authTokenDartDefineFile: options.authTokenDartDefineFile,
+            enableInteractionRecorder:
+                options.launchConfiguration.enableInteractionRecorder,
           ),
         ),
       ],

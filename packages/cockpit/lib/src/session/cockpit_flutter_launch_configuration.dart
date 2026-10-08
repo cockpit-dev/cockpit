@@ -36,6 +36,7 @@ final class CockpitFlutterLaunchConfiguration {
     Iterable<String> dartDefineFromFiles = const <String>[],
     Iterable<String> flutterArgs = const <String>[],
     Map<String, String> environment = const <String, String>{},
+    bool enableInteractionRecorder = false,
   }) {
     final normalizedDartDefines = _normalizeDartDefines(dartDefines);
     final normalizedDartDefineFromFiles = _normalizeNonEmptyList(
@@ -49,6 +50,7 @@ final class CockpitFlutterLaunchConfiguration {
       dartDefineFromFiles: normalizedDartDefineFromFiles,
       flutterArgs: normalizedFlutterArgs,
       environment: normalizedEnvironment,
+      enableInteractionRecorder: enableInteractionRecorder,
     );
   }
 
@@ -57,6 +59,7 @@ final class CockpitFlutterLaunchConfiguration {
     required this.dartDefineFromFiles,
     required this.flutterArgs,
     required this.environment,
+    required this.enableInteractionRecorder,
   });
 
   static const CockpitFlutterLaunchConfiguration empty =
@@ -65,6 +68,7 @@ final class CockpitFlutterLaunchConfiguration {
         dartDefineFromFiles: <String>[],
         flutterArgs: <String>[],
         environment: <String, String>{},
+        enableInteractionRecorder: false,
       );
 
   factory CockpitFlutterLaunchConfiguration.fromJson(
@@ -76,6 +80,7 @@ final class CockpitFlutterLaunchConfiguration {
         'dartDefineFromFiles',
         'flutterArgs',
         'environment',
+        'enableInteractionRecorder',
       };
       final unknown = json.keys.toSet().difference(allowed);
       if (unknown.isNotEmpty) {
@@ -90,6 +95,10 @@ final class CockpitFlutterLaunchConfiguration {
         dartDefineFromFiles: _readStringList(json, 'dartDefineFromFiles'),
         flutterArgs: _readStringList(json, 'flutterArgs'),
         environment: _readStringMap(json, 'environment'),
+        enableInteractionRecorder: _readBoolean(
+          json,
+          'enableInteractionRecorder',
+        ),
       );
     } on CockpitApplicationServiceException {
       rethrow;
@@ -109,12 +118,14 @@ final class CockpitFlutterLaunchConfiguration {
   final List<String> dartDefineFromFiles;
   final List<String> flutterArgs;
   final Map<String, String> environment;
+  final bool enableInteractionRecorder;
 
   bool get isEmpty =>
       dartDefines.isEmpty &&
       dartDefineFromFiles.isEmpty &&
       flutterArgs.isEmpty &&
-      environment.isEmpty;
+      environment.isEmpty &&
+      !enableInteractionRecorder;
 
   Map<String, String>? get processEnvironment => environment.isEmpty
       ? null
@@ -149,6 +160,7 @@ final class CockpitFlutterLaunchConfiguration {
       dartDefines: dartDefines,
       dartDefineFromFiles: dartDefineFromFiles,
       flutterArgs: flutterArgs,
+      enableInteractionRecorder: enableInteractionRecorder,
       environment: Map<String, String>.unmodifiable(<String, String>{
         ...environment,
         ...managedEnvironment,
@@ -236,6 +248,7 @@ final class CockpitFlutterLaunchConfiguration {
             'environment': environment
           else
             'environmentKeys': environment.keys.toList(growable: false),
+        if (enableInteractionRecorder) 'enableInteractionRecorder': true,
       };
 
   static List<String> _normalizeDartDefines(Iterable<String> values) {
@@ -389,6 +402,21 @@ final class CockpitFlutterLaunchConfiguration {
     }
     return result;
   }
+
+  static bool _readBoolean(Map<String, Object?> json, String key) {
+    final value = json[key];
+    if (value == null) {
+      return false;
+    }
+    if (value is! bool) {
+      throw CockpitApplicationServiceException(
+        code: 'invalidLaunchConfiguration',
+        message: 'Launch configuration boolean fields must be booleans.',
+        details: <String, Object?>{'field': key},
+      );
+    }
+    return value;
+  }
 }
 
 List<String> cockpitBuildFlutterLaunchArguments({
@@ -409,6 +437,7 @@ List<String> cockpitBuildRemoteControlDartDefineArguments({
   String? authTokenDartDefineFile,
   bool disableHttpNetworkObserver = false,
   bool disableRuntimeObserver = false,
+  bool enableInteractionRecorder = false,
 }) {
   return <String>[
     '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
@@ -422,6 +451,8 @@ List<String> cockpitBuildRemoteControlDartDefineArguments({
       '--dart-define=FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER=false',
     if (disableRuntimeObserver)
       '--dart-define=FLUTTER_COCKPIT_ENABLE_RUNTIME_OBSERVER=false',
+    if (enableInteractionRecorder)
+      '--dart-define=FLUTTER_COCKPIT_ENABLE_INTERACTION_RECORDER=true',
     '--dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=$flutterVersion',
   ];
 }

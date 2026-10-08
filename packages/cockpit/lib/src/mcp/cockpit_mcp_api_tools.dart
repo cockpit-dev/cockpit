@@ -1016,6 +1016,10 @@ Map<String, Object?> _flutterLaunchConfigurationSchema() => const {
       'additionalProperties': <String, Object?>{'type': 'string'},
       'maxProperties': 1024,
     },
+    'enableInteractionRecorder': <String, Object?>{
+      'type': 'boolean',
+      'default': false,
+    },
   },
   'additionalProperties': false,
 };

@@ -136,6 +136,10 @@ const Map<String, Object?> _launchConfiguration = <String, Object?>{
       'additionalProperties': <String, Object?>{'type': 'string'},
       'maxProperties': 1024,
     },
+    'enableInteractionRecorder': <String, Object?>{
+      ..._boolean,
+      'default': false,
+    },
   },
   'additionalProperties': false,
 };

@@ -384,6 +384,8 @@ final class CockpitDevelopmentSessionMachineLauncher {
       authTokenDartDefineFile: request.authTokenDartDefineFile,
       disableHttpNetworkObserver: disableIpv6UnsafeObservers,
       disableRuntimeObserver: disableIpv6UnsafeObservers,
+      enableInteractionRecorder:
+          request.launchConfiguration.enableInteractionRecorder,
     );
     return cockpitBuildFlutterLaunchArguments(
       userConfiguration: request.launchConfiguration,

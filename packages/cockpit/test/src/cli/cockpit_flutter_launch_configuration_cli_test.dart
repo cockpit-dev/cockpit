@@ -37,6 +37,25 @@ void main() {
     expect(cockpitReadFlutterLaunchConfiguration(parser.parse(const [])), null);
   });
 
+  test('reads the interaction recorder switch', () {
+    final parser = ArgParser();
+    cockpitAddFlutterLaunchConfigurationOptions(parser);
+
+    final enabled = cockpitReadFlutterLaunchConfiguration(
+      parser.parse(const <String>['--enable-interaction-recorder']),
+    );
+    expect(enabled, <String, Object?>{'enableInteractionRecorder': true});
+
+    final disabled = cockpitReadFlutterLaunchConfiguration(
+      parser.parse(const <String>[
+        '--dart-define=API_URL=https://example.test',
+      ]),
+    );
+    expect(disabled, <String, Object?>{
+      'dartDefines': <String>['API_URL=https://example.test'],
+    });
+  });
+
   test('rebases dev define files from the invocation directory', () async {
     final root = await Directory.systemTemp.createTemp(
       'cockpit-dev-define-file-',

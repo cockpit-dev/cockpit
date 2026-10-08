@@ -132,6 +132,8 @@ final class CockpitIosPhysicalRemoteSessionLauncher
             authTokenDartDefineFile: options.authTokenDartDefineFile,
             disableHttpNetworkObserver: true,
             disableRuntimeObserver: true,
+            enableInteractionRecorder:
+                options.launchConfiguration.enableInteractionRecorder,
           ),
         ),
       ],

@@ -624,6 +624,7 @@ void main() {
             dartDefineFromFiles: const <String>['config/dev.json'],
             flutterArgs: const <String>['--track-widget-creation'],
             environment: const <String, String>{'API_TOKEN': 'secret'},
+            enableInteractionRecorder: true,
           ),
           appEnvironment: const <String, String>{
             'API_TOKEN': 'secret',
@@ -639,6 +640,8 @@ void main() {
           '--dart-define-from-file=config/dev.json',
           '--track-widget-creation',
           '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
+          '--dart-define=FLUTTER_COCKPIT_ENABLE_INTERACTION_RECORDER=true',
+          '--dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.38.9',
         ]),
       );
       expect(buildInvocations.first['environment'], <String, String>{

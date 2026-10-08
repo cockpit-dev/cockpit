@@ -29,6 +29,11 @@ void cockpitAddFlutterLaunchConfigurationOptions(ArgParser parser) {
           'Repeatable non-secret child-process environment override as '
           'KEY=VALUE. Values are never persisted.',
       splitCommas: false,
+    )
+    ..addFlag(
+      'enable-interaction-recorder',
+      defaultsTo: false,
+      help: 'Start the app with the in-app interaction recorder enabled.',
     );
 }
 
@@ -43,6 +48,7 @@ Map<String, Object?>? cockpitReadFlutterLaunchConfiguration(
         ...cockpitParseFlutterArgumentString(value),
     ],
     environment: _environment(arguments.multiOption('env')),
+    enableInteractionRecorder: arguments.flag('enable-interaction-recorder'),
   );
   return configuration.isEmpty
       ? null

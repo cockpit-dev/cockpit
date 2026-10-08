@@ -123,6 +123,59 @@ void main() {
     );
   });
 
+  test('interaction recorder switch defaults off and stays out of argv', () {
+    expect(
+      CockpitFlutterLaunchConfiguration.empty.enableInteractionRecorder,
+      isFalse,
+    );
+    expect(CockpitFlutterLaunchConfiguration.empty.isEmpty, isTrue);
+    expect(
+      CockpitFlutterLaunchConfiguration.fromJson(const <String, Object?>{
+        'enableInteractionRecorder': true,
+      }).toFlutterArguments(),
+      isEmpty,
+    );
+  });
+
+  test('interaction recorder switch round-trips through JSON', () {
+    final enabled = CockpitFlutterLaunchConfiguration.fromJson(
+      const <String, Object?>{'enableInteractionRecorder': true},
+    );
+    final disabled = CockpitFlutterLaunchConfiguration.fromJson(
+      const <String, Object?>{'enableInteractionRecorder': false},
+    );
+
+    expect(enabled.enableInteractionRecorder, isTrue);
+    expect(enabled.toJson(), <String, Object?>{
+      'enableInteractionRecorder': true,
+    });
+    expect(enabled.isEmpty, isFalse);
+    expect(disabled.enableInteractionRecorder, isFalse);
+    expect(disabled.toJson(), isEmpty);
+    expect(disabled.isEmpty, isTrue);
+    expect(
+      enabled.withManagedEnvironment(const <String, String>{
+        'TMPDIR': '/tmp/cockpit',
+      }).enableInteractionRecorder,
+      isTrue,
+    );
+  });
+
+  test('interaction recorder switch rejects non-boolean values', () {
+    expect(
+      () => CockpitFlutterLaunchConfiguration.fromJson(const <String, Object?>{
+        'enableInteractionRecorder': 'true',
+      }),
+      throwsA(
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'invalidLaunchConfiguration',
+        ),
+      ),
+    );
+  });
+
   test('remote control dart defines are rendered by one shared builder', () {
     expect(
       cockpitBuildRemoteControlDartDefineArguments(
@@ -154,6 +207,29 @@ void main() {
         authTokenDartDefineFile: '/tmp/cockpit/auth.json',
       ),
       contains('--dart-define-from-file=/tmp/cockpit/auth.json'),
+    );
+
+    // The interaction recorder define is emitted only when requested.
+    expect(
+      cockpitBuildRemoteControlDartDefineArguments(
+        host: '::',
+        port: 47331,
+        flutterVersion: '3.32.0',
+        launchId: 'launch-1',
+        disableHttpNetworkObserver: true,
+        disableRuntimeObserver: true,
+        enableInteractionRecorder: true,
+      ),
+      <String>[
+        '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
+        '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=::',
+        '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
+        '--dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-1',
+        '--dart-define=FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER=false',
+        '--dart-define=FLUTTER_COCKPIT_ENABLE_RUNTIME_OBSERVER=false',
+        '--dart-define=FLUTTER_COCKPIT_ENABLE_INTERACTION_RECORDER=true',
+        '--dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.32.0',
+      ],
     );
   });
 }
