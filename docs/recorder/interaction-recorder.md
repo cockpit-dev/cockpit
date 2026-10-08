@@ -231,14 +231,15 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
   engine — phase, step list, replay report, export bundle; all commands.
   Panels and custom hosts bind to it exclusively; nothing reaches the
   engine directly.
-- `CockpitRecorderPanel`: four areas — control (start/pause/stop, step
-  counter), timeline (live step list with locator summary, swipe-to-delete
-  = `discardLastStep`, annotate, segment marks), export (copy YAML to
-  clipboard via `Clipboard`, bundle save via an injectable
-  `CockpitRecorderExportGateway` — the default writes the YAML to a
-  caller-supplied directory with `dart:io`; share-sheet affordances are the
-  host's concern), replay (run verify replay, per-step status).
-- Default host `CockpitRecorderHost`: draggable floating ball with edge
+- `CockpitRecorderPanel`: full-screen layout — header (phase badge, live
+  step/unresolved counters, close), context-primary control row (Start+name /
+  Pause+Stop / Resume+Stop, segments as a compact secondary row), the timeline
+  as the hero area (kind-colored rows, monospace locators, replay status badges
+  joined per step, annotate, delete-last), and a bottom bar (verify replay,
+  copy YAML, save via an injectable `CockpitRecorderExportGateway`; the
+  default writes the YAML to a caller-supplied directory with `dart:io`;
+  share-sheet affordances are the host's concern).
+- Default host `CockpitRecorderHost`: compact 40×40 draggable floating ball with edge
   docking; expands into a panel sheet. Collapsed ball is a small REC
   indicator. Host mode `guest` mounts no entry (panel content only, for
   embedding in an existing floating window); `headless` mounts nothing.

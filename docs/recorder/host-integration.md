@@ -23,8 +23,10 @@ controller.start(); controller.pause(); controller.resume();
 controller.stop(); controller.export(); controller.verifyReplay();
 
 // ③ Composable widgets — embed wherever your host renders panels.
-const CockpitRecorderPanel();      // full panel: control / timeline / export / replay
-const CockpitRecorderEntryButton(); // compact entry icon (presentational, onTap callback)
+const CockpitRecorderPanel();      // full-screen panel content (header /
+                                   // controls / timeline / bottom bar); pass
+                                   // onClose to get the header close button
+const CockpitRecorderEntryButton(); // compact 40×40 entry icon (presentational, onTap callback)
 const CockpitRecorderIndicator();   // passive phase indicator (always IgnorePointer)
 
 // ④ Exclusion marker — keep host chrome out of recordings and evidence.
