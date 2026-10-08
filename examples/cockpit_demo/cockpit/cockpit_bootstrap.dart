@@ -99,6 +99,9 @@ Widget buildCockpitDemoDevelopmentApp() {
       defineFile: defineFileValue,
       httpNetworkObserverEnabled: enableHttpNetworkObserver,
       runtimeObserverEnabled: enableRuntimeObserver,
+      interactionRecorderEnabled: enableInteractionRecorder,
+      bindingRecorderEnabled:
+          FlutterCockpit.binding.configuration.recorder.enabled,
     ),
     appActions: cockpitDemoAppActions(() => service),
     child: child,
@@ -224,6 +227,8 @@ Map<String, Object?> cockpitDemoAppState({
   required String defineFile,
   required bool httpNetworkObserverEnabled,
   required bool runtimeObserverEnabled,
+  required bool interactionRecorderEnabled,
+  required bool bindingRecorderEnabled,
 }) {
   final sync = service?.syncState;
   final settings = service?.settingsState.settings;
@@ -232,6 +237,8 @@ Map<String, Object?> cockpitDemoAppState({
     'acceptancePlatform': acceptancePlatform,
     'httpNetworkObserverEnabled': httpNetworkObserverEnabled,
     'runtimeObserverEnabled': runtimeObserverEnabled,
+    'interactionRecorderEnabled': interactionRecorderEnabled,
+    'bindingRecorderEnabled': bindingRecorderEnabled,
     'defineFile': defineFile,
     if (service != null) ...<String, Object?>{
       'syncStatus': sync?.status.name,

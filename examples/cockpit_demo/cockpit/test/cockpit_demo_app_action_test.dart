@@ -28,6 +28,8 @@ void main() {
           defineFile: '',
           httpNetworkObserverEnabled: true,
           runtimeObserverEnabled: true,
+          interactionRecorderEnabled: false,
+          bindingRecorderEnabled: false,
         ),
         appActions: cockpitDemoAppActions(() => service),
         child: CockpitDemoApp(

@@ -27,6 +27,8 @@ void main() {
           defineFile: '',
           httpNetworkObserverEnabled: true,
           runtimeObserverEnabled: true,
+          interactionRecorderEnabled: false,
+          bindingRecorderEnabled: false,
         ),
         child: CockpitDemoApp(
           database: database,
