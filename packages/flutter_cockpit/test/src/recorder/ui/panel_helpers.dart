@@ -125,3 +125,16 @@ bool isButtonEnabled(WidgetTester tester, String label) {
       .first;
   return tester.widget<GestureDetector>(gesture).onTap != null;
 }
+
+/// The color of a step row's 8×8 leading dot — where replay outcomes and
+/// unresolved targets tint the row.
+Color leadingDotColor(WidgetTester tester, Finder row) {
+  final dot = find
+      .descendant(of: row, matching: find.byType(Container))
+      .evaluate()
+      .singleWhere(
+        (element) =>
+            (element.findRenderObject()! as RenderBox).size == const Size(8, 8),
+      );
+  return ((dot.widget as Container).decoration as BoxDecoration).color!;
+}

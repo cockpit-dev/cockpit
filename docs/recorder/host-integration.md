@@ -23,8 +23,9 @@ controller.start(); controller.pause(); controller.resume();
 controller.stop(); controller.export(); controller.verifyReplay();
 
 // ③ Composable widgets — embed wherever your host renders panels.
-const CockpitRecorderPanel();      // full-screen panel content (header /
-                                   // controls / timeline / bottom bar); pass
+const CockpitRecorderPanel();      // panel content on a solid dark surface
+                                   // (REC-timer header / iOS-list step flow /
+                                   // actions / bottom phase controls); pass
                                    // onClose to get the header close button
 const CockpitRecorderEntryButton(); // compact 40×40 entry icon (presentational, onTap callback)
 const CockpitRecorderIndicator();   // passive phase indicator (always IgnorePointer)
@@ -39,7 +40,7 @@ CockpitRecorderExclude(child: myHostChrome);
 
 | Mode | What mounts | Use when |
 | --- | --- | --- |
-| `floatingBall` (default) | The built-in draggable ball + panel sheet | No existing debug panel |
+| `floatingBall` (default) | The built-in draggable ball + solid dark panel (bottom sheet on phone widths, centered card when wide) | No existing debug panel |
 | `guest` | Nothing — scope + controller only | Your app already has a floating-window system |
 | `headless` | Nothing at all | Remote-driven recording (`cockpit record`, Console, MCP) |
 

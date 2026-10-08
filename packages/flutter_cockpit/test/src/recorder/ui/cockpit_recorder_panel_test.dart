@@ -2,6 +2,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit/src/recorder/ui/cockpit_recorder_panel_widgets.dart';
 import 'package:flutter_cockpit/src/recorder/ui/cockpit_recorder_timeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,44 +10,45 @@ import 'panel_helpers.dart';
 
 void main() {
   group('header', () {
-    testWidgets('shows the title, phase dot, and live counters', (
+    testWidgets('idle shows the Recorder title without counters', (
+      tester,
+    ) async {
+      await pumpPanel(tester);
+
+      expect(find.text('Recorder'), findsOneWidget);
+      expect(find.textContaining('REC '), findsNothing);
+      // No session, no step-count suffix beside the title.
+      expect(find.textContaining(' · '), findsNothing);
+      // The phase is the header dot's color, not an uppercase word.
+      expect(find.text('RECORDING'), findsNothing);
+    });
+
+    testWidgets('switches the status title through the session phases', (
       tester,
     ) async {
       final controller = await pumpPanel(tester);
+
       controller.start();
       await tester.pump();
 
-      expect(find.text('Recorder'), findsOneWidget);
-      expect(find.text('0 steps · 0 unresolved'), findsOneWidget);
-      // The phase is the header dot's color, not an uppercase word.
-      expect(find.text('RECORDING'), findsNothing);
+      // The clock is recomputed per controller notification: a fresh
+      // session reads 00:00.
+      expect(find.text('REC 00:00'), findsOneWidget);
+      expect(find.text(' · 0 steps'), findsOneWidget);
 
       controller.recorder.recordInteractionStep(
         unresolvedStep(CockpitInteractionStepKind.tap),
       );
       await tester.pump();
+      expect(find.text(' · 1 steps'), findsOneWidget);
 
-      expect(find.text('1 steps · 1 unresolved'), findsOneWidget);
-    });
-
-    testWidgets('shows the session name once recording starts', (tester) async {
-      final controller = await pumpPanel(tester);
-
-      await tester.enterText(find.byType(EditableText), 'login flow');
-      await tester.tap(find.text('Record'));
+      controller.pause();
       await tester.pump();
+      expect(find.text('Paused · 00:00'), findsOneWidget);
 
-      expect(controller.phase, CockpitRecorderPhase.recording);
-      expect(find.textContaining('· login flow'), findsOneWidget);
-    });
-
-    testWidgets('idle shows neither counters nor a placeholder', (
-      tester,
-    ) async {
-      await pumpPanel(tester);
-
-      expect(find.text('no session'), findsNothing);
-      expect(find.textContaining('unresolved'), findsNothing);
+      controller.stop();
+      await tester.pump();
+      expect(find.text('Stopped'), findsOneWidget);
     });
 
     testWidgets('embedded panels render no close button', (tester) async {
@@ -55,11 +57,11 @@ void main() {
     });
   });
 
-  group('toolbar', () {
+  group('control zone', () {
     testWidgets('shows only the current phase primary buttons', (tester) async {
       final controller = await pumpPanel(tester);
 
-      // idle: record with the name field beside it.
+      // idle: the name field above a full-width Record.
       expect(isButtonEnabled(tester, 'Record'), isTrue);
       expect(find.text('Session name (optional)'), findsOneWidget);
       expect(find.text('Pause'), findsNothing);
@@ -69,7 +71,7 @@ void main() {
       controller.start();
       await tester.pump();
 
-      // recording: pause + stop + the segment field.
+      // recording: pause + stop + the segment tools.
       expect(find.text('Record'), findsNothing);
       expect(isButtonEnabled(tester, 'Pause'), isTrue);
       expect(find.text('Resume'), findsNothing);
@@ -89,7 +91,8 @@ void main() {
       await tester.pump();
 
       // stopped: record again, with a hint instead of the name field.
-      expect(isButtonEnabled(tester, 'Record'), isTrue);
+      expect(isButtonEnabled(tester, 'Record again'), isTrue);
+      expect(find.text('Record'), findsNothing);
       expect(find.text('Stop'), findsNothing);
       expect(find.text('Session name (optional)'), findsNothing);
       expect(
@@ -115,7 +118,7 @@ void main() {
       controller.exportBundle();
 
       expect(controller.lastBundle!.caseDocument['name'], 'login flow');
-      // Starting switched the row to recording controls; the name field is
+      // Starting switched the zone to recording controls; the name field is
       // gone and took its text with it.
       expect(find.text('login flow'), findsNothing);
     });
@@ -204,6 +207,7 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('Cannot pause'), findsOneWidget);
+      expect(isButtonEnabled(tester, 'Dismiss'), isTrue);
 
       await tester.tap(find.text('Dismiss'));
       await tester.pump();
@@ -212,7 +216,7 @@ void main() {
     });
   });
 
-  group('timeline area', () {
+  group('steps flow', () {
     testWidgets('renders action titles and the unresolved marker', (
       tester,
     ) async {
@@ -233,6 +237,12 @@ void main() {
       expect(find.text('Tap · save'), findsOneWidget);
       expect(find.text('@save'), findsOneWidget);
       expect(find.text('(unresolved target)'), findsOneWidget);
+      // The leading dots carry the row state: neutral for a resolved step,
+      // amber for an unresolved one.
+      final firstRow = find.byKey(const ValueKey<String>('s1'));
+      final secondRow = find.byKey(const ValueKey<String>('s2'));
+      expect(leadingDotColor(tester, firstRow), cockpitRecorderInkTertiary);
+      expect(leadingDotColor(tester, secondRow), cockpitRecorderWarning);
     });
 
     testWidgets('renders relative times from the first step', (tester) async {
@@ -282,21 +292,21 @@ void main() {
 
       final lastRow = find.byKey(const ValueKey<String>('s2'));
       final earlierRow = find.byKey(const ValueKey<String>('s1'));
-      expect(isRowButtonEnabled(tester, lastRow, 'Delete step'), isTrue);
+      expect(isRowButtonEnabled(tester, lastRow, 'Delete'), isTrue);
       expect(
-        find.descendant(of: earlierRow, matching: find.text('Delete step')),
+        find.descendant(of: earlierRow, matching: find.text('Delete')),
         findsNothing,
       );
 
       // Pausing hides the affordance: no step can be discarded.
       controller.pause();
       await tester.pump();
-      expect(find.text('Delete step'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
 
       controller.resume();
       await tester.pump();
       await tester.tap(
-        find.descendant(of: lastRow, matching: find.text('Delete step')),
+        find.descendant(of: lastRow, matching: find.text('Delete')),
       );
       await tester.pump();
 
@@ -321,11 +331,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.descendant(of: row, matching: find.text('key @save')),
+        find.descendant(of: row, matching: find.text('key · @save')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: row, matching: find.text('text New task')),
+        find.descendant(of: row, matching: find.text('text · New task')),
         findsOneWidget,
       );
       expect(
@@ -341,7 +351,7 @@ void main() {
       await tester.tap(row);
       await tester.pumpAndSettle();
       expect(
-        find.descendant(of: row, matching: find.text('key @save')),
+        find.descendant(of: row, matching: find.text('key · @save')),
         findsNothing,
       );
       expect(controller.steps.single.annotation, isNull);
@@ -540,7 +550,7 @@ void main() {
     });
   });
 
-  group('bottom bar', () {
+  group('action row', () {
     testWidgets('stays disabled until a session exists', (tester) async {
       final controller = await pumpPanel(tester);
 
@@ -686,7 +696,7 @@ void main() {
       controller.recorder.recordInteractionStep(
         stepWithCandidates(CockpitInteractionStepKind.routeChange),
       );
-      // Stop first: the last row swaps its outcome for the Delete affordance
+      // Stop first: the last row swaps its time for the Delete affordance
       // while recording, and every outcome must be visible at once.
       controller.stop();
       await tester.pump();
@@ -696,18 +706,12 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // The outcome words live inside the timeline rows, joined by step id.
+      // The outcomes tint the rows' leading dots, joined by step id.
       final s1Row = find.byKey(const ValueKey<String>('s1'));
       final s2Row = find.byKey(const ValueKey<String>('s2'));
       final s3Row = find.byKey(const ValueKey<String>('s3'));
-      expect(
-        find.descendant(of: s1Row, matching: find.text('passed')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: s2Row, matching: find.text('deviated')),
-        findsOneWidget,
-      );
+      expect(leadingDotColor(tester, s1Row), cockpitRecorderSuccess);
+      expect(leadingDotColor(tester, s2Row), cockpitRecorderRecord);
       expect(
         find.descendant(
           of: s2Row,
@@ -715,10 +719,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: s3Row, matching: find.text('skipped')),
-        findsOneWidget,
-      );
+      expect(leadingDotColor(tester, s3Row), cockpitRecorderInkTertiary);
       expect(
         find.text('replay: 1 passed · 1 deviated · 1 skipped'),
         findsOneWidget,

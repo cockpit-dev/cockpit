@@ -76,7 +76,13 @@ void main() {
       );
     }
 
-    testWidgets('renders the collapsed 40x40 ball and no panel', (
+    Finder frame() =>
+        find.byKey(const ValueKey<String>('cockpit_recorder_panel_frame'));
+
+    Finder handle() =>
+        find.byKey(const ValueKey<String>('cockpit_recorder_sheet_handle'));
+
+    testWidgets('renders the collapsed 40x40 solid ball and no panel', (
       tester,
     ) async {
       await pumpHost(tester);
@@ -92,6 +98,14 @@ void main() {
       expect(
         tester.getSize(find.byType(CockpitRecorderEntryButton)),
         const Size(40, 40),
+      );
+      // The ball is a solid circle — no backdrop blur anywhere.
+      expect(
+        find.descendant(
+          of: find.byType(CockpitRecorderEntryButton),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
       );
       // The exclude marker wraps the host chrome (tier a, belt-and-braces:
       // the host also sits beside the capture subtree in the root stack).
@@ -193,7 +207,7 @@ void main() {
       expect(marker, isA<CockpitRecorderExcludeRenderObject>());
     });
 
-    testWidgets('tap expands the card overlay and close collapses it', (
+    testWidgets('tap expands the overlay and close collapses it', (
       tester,
     ) async {
       await pumpHost(tester);
@@ -217,7 +231,7 @@ void main() {
       expect(find.byType(CockpitRecorderPanel), findsNothing);
     });
 
-    testWidgets('centers an 840-wide card at 88% height on wide windows', (
+    testWidgets('centers a 480-wide solid card on wide windows', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(1920, 1080));
@@ -227,18 +241,17 @@ void main() {
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pumpAndSettle();
 
-      // The card centers at max 840 logical pixels wide and 88% of the
-      // overlay height: 950.4 tall with a 64.8 top margin.
-      const overlay = Size(1920, 1080);
-      final cardHeight = overlay.height * 0.88;
+      // The card centers at 480x620, clipped to its rounded shape.
+      expect(tester.getRect(frame()), const Rect.fromLTWH(720, 230, 480, 620));
+      // The card form has no grab handle.
+      expect(handle(), findsNothing);
       expect(
-        tester.getRect(find.byType(CockpitRecorderPanel)),
-        Rect.fromLTWH(
-          (overlay.width - 840) / 2,
-          (overlay.height - cardHeight) / 2,
-          840,
-          cardHeight,
-        ),
+        find.ancestor(of: frame(), matching: find.byType(ClipRRect)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: frame(), matching: find.byType(BackdropFilter)),
+        findsNothing,
       );
       // The scrim behind it still fills the whole window.
       expect(
@@ -246,6 +259,47 @@ void main() {
           find.byKey(const ValueKey<String>('cockpit_recorder_fullscreen')),
         ),
         const Rect.fromLTWH(0, 0, 1920, 1080),
+      );
+    });
+
+    testWidgets(
+      'presents a bottom sheet with a grab handle on narrow windows',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(400, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pumpHost(tester);
+
+        await tester.tap(find.byType(CockpitRecorderEntryButton));
+        await tester.pumpAndSettle();
+
+        // Full width at the bottom, capped at 72% of the overlay height.
+        expect(tester.getRect(frame()), const Rect.fromLTWH(0, 224, 400, 576));
+        // The sheet form carries a 36x5 grab handle, centered at its top.
+        expect(handle(), findsOneWidget);
+        expect(tester.getSize(handle()), const Size(36, 5));
+        expect(
+          find.ancestor(of: frame(), matching: find.byType(ClipRRect)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('tapping the scrim keeps the panel open', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pumpHost(tester);
+
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+
+      // The scrim area above the sheet stays dead: closing is the ✕'s job.
+      await tester.tapAt(const Offset(200, 100));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CockpitRecorderPanel), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('cockpit_recorder_fullscreen')),
+        findsOneWidget,
       );
     });
   });
@@ -318,7 +372,7 @@ void main() {
       );
 
       // The panel resolves the controller from the scope above the root
-      // Stack and renders its header and toolbar without a close button
+      // Stack and renders its header and controls without a close button
       // (nothing to collapse in an embedded host).
       expect(find.text('Recorder'), findsOneWidget);
       expect(find.text('Record'), findsOneWidget);

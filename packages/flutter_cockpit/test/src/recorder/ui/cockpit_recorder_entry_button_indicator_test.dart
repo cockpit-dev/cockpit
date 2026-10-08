@@ -29,6 +29,37 @@ void main() {
       expect(taps, 1);
     });
 
+    testWidgets('renders the solid ball with a stroke and red dot', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(child: CockpitRecorderEntryButton(onTap: () {})),
+        ),
+      );
+
+      // The ball is solid — no backdrop blur anywhere.
+      expect(find.byType(BackdropFilter), findsNothing);
+
+      // The ball surface: solid dark fill with a hairline stroke.
+      final ball = tester.widget<Container>(find.byType(Container));
+      final ballDecoration = ball.decoration! as BoxDecoration;
+      expect(ballDecoration.color, cockpitRecorderBallSurface);
+      expect(ballDecoration.shape, BoxShape.circle);
+      expect(ballDecoration.border!.top.color, cockpitRecorderStroke);
+
+      // The center dot is record red.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DecoratedBox &&
+              (widget.decoration as BoxDecoration).color ==
+                  cockpitRecorderRecord,
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('exposes a labeled button semantics node', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
@@ -50,7 +81,7 @@ void main() {
       );
       expect(
         cockpitRecorderIndicatorColor(CockpitRecorderPhase.recording),
-        cockpitRecorderError,
+        cockpitRecorderRecord,
       );
       expect(
         cockpitRecorderIndicatorColor(CockpitRecorderPhase.paused),

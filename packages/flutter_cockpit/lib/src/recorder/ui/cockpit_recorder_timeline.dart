@@ -5,14 +5,15 @@ import '../cockpit_replay_report.dart';
 import 'cockpit_recorder_controller.dart';
 import 'cockpit_recorder_panel_widgets.dart';
 
-/// Timeline hero of the recorder panel: the live step list on a connected
-/// vertical spine, newest last and auto-scrolled to the newest step. Rows
-/// expand in place — tap anywhere on a row to inspect its locator
-/// candidates and edit its note. Replay outcomes join from the
-/// controller's last verify-replay pass.
+/// Step flow of the recorder panel: a plain iOS-style list — a leading dot,
+/// an action title, a selector line — newest last and auto-scrolled to the
+/// newest step, hairline separators between rows. Rows expand in place: tap
+/// anywhere on a row to inspect its locator candidates and edit its note.
+/// Replay outcomes join from the controller's last verify-replay pass and
+/// color the row's dot.
 ///
 /// Delete is an engine constraint, not a UI preference: only the most
-/// recently recorded step can be discarded, so the button appears on the
+/// recently recorded step can be discarded, so the affordance appears on the
 /// last row alone while recording.
 final class CockpitRecorderTimeline extends StatefulWidget {
   /// Creates a timeline over the controller's current steps.
@@ -100,63 +101,44 @@ final class _CockpitRecorderTimelineState
       listenable: widget.controller,
       builder: (context, _) {
         final steps = widget.controller.steps;
+        if (steps.isEmpty) {
+          return const _TimelineEmptyState();
+        }
         final replayById = <String, CockpitReplayReport>{
           for (final report
               in widget.controller.replayReports ??
                   const <CockpitReplayReport>[])
             report.stepId: report,
         };
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'Timeline',
-                  style: TextStyle(
-                    color: cockpitRecorderInkSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (steps.isEmpty)
-                const Expanded(child: _TimelineEmptyState())
-              else
-                Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    itemCount: steps.length,
-                    itemBuilder: (context, index) {
-                      final step = steps[index];
-                      return _TimelineRow(
-                        key: ValueKey<String>(step.stepId),
-                        step: step,
-                        isLast: index == steps.length - 1,
-                        isRecording:
-                            widget.controller.phase ==
-                            CockpitRecorderPhase.recording,
-                        canMutate:
-                            widget.controller.phase ==
-                            CockpitRecorderPhase.recording,
-                        canDelete: widget.controller.canDiscardLast,
-                        expanded: _expandedStepId == step.stepId,
-                        noteController: _noteController,
-                        replay: replayById[step.stepId],
-                        offset: step.recordedAt.difference(
-                          steps.first.recordedAt,
-                        ),
-                        onToggle: () => _toggleExpanded(step),
-                        onSaveAnnotation: (note) => _saveAnnotation(step, note),
-                        onDelete: widget.controller.discardLastStep,
-                      );
-                    },
-                  ),
-                ),
-            ],
+        return ListView.separated(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          itemCount: steps.length,
+          separatorBuilder: (_, _) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            height: 0.5,
+            color: cockpitRecorderSeparator,
           ),
+          itemBuilder: (context, index) {
+            final step = steps[index];
+            return _TimelineRow(
+              key: ValueKey<String>(step.stepId),
+              step: step,
+              isLast: index == steps.length - 1,
+              isRecording:
+                  widget.controller.phase == CockpitRecorderPhase.recording,
+              canMutate:
+                  widget.controller.phase == CockpitRecorderPhase.recording,
+              canDelete: widget.controller.canDiscardLast,
+              expanded: _expandedStepId == step.stepId,
+              noteController: _noteController,
+              replay: replayById[step.stepId],
+              offset: step.recordedAt.difference(steps.first.recordedAt),
+              onToggle: () => _toggleExpanded(step),
+              onSaveAnnotation: (note) => _saveAnnotation(step, note),
+              onDelete: widget.controller.discardLastStep,
+            );
+          },
         );
       },
     );
@@ -170,22 +152,24 @@ final class _TimelineEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: const BoxConstraints(maxWidth: 320),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
               'No steps yet',
-              style: cockpitRecorderBodyStyle.copyWith(
+              style: cockpitRecorderTitleStyle.copyWith(
                 color: cockpitRecorderInkSecondary,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Start a recording and use your app. Taps, text, scrolls, and '
               'route changes appear here as they are captured.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: cockpitRecorderInkTertiary, fontSize: 12),
+              style: cockpitRecorderSecondaryStyle.copyWith(
+                color: cockpitRecorderInkTertiary,
+              ),
             ),
           ],
         ),
@@ -194,7 +178,7 @@ final class _TimelineEmptyState extends StatelessWidget {
   }
 }
 
-final class _TimelineRow extends StatefulWidget {
+final class _TimelineRow extends StatelessWidget {
   const _TimelineRow({
     required this.step,
     required this.isLast,
@@ -225,113 +209,90 @@ final class _TimelineRow extends StatefulWidget {
   final VoidCallback onDelete;
 
   @override
-  State<_TimelineRow> createState() => _TimelineRowState();
-}
-
-final class _TimelineRowState extends State<_TimelineRow> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final step = widget.step;
+    final step = this.step;
     final annotation = step.annotation;
-    final reason = widget.replay?.reason;
+    final reason = replay?.reason;
     final selector = _selectorLine(step);
     final settledAfterMs = step.settledAfterMs;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.onToggle,
-      child: IntrinsicHeight(
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            _Spine(color: _nodeColor()),
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: _LeadingDot(color: _nodeColor()),
+            ),
+            const SizedBox(width: 12),
             Expanded(
-              child: MouseRegion(
-                onEnter: (_) => setState(() => _hovered = true),
-                onExit: (_) => setState(() => _hovered = false),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _hovered
-                        ? cockpitRecorderSurface1
-                        : const Color(0x00000000),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _titleLine(),
-                      if (selector != null || settledAfterMs != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Row(
-                            children: <Widget>[
-                              if (selector != null)
-                                Expanded(
-                                  child: Text(
-                                    selector,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: cockpitRecorderMonoStyle.copyWith(
-                                      color: step.locatorCandidates.isNotEmpty
-                                          ? cockpitRecorderInkSecondary
-                                          : cockpitRecorderWarning,
-                                    ),
-                                  ),
-                                ),
-                              if (settledAfterMs != null)
-                                Text(
-                                  'settled ${settledAfterMs}ms',
-                                  style: cockpitRecorderMonoStyle.copyWith(
-                                    color: cockpitRecorderInkTertiary,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      if (step.segments.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Wrap(
-                            spacing: 4,
-                            runSpacing: 2,
-                            children: <Widget>[
-                              for (final segment in step.segments)
-                                CockpitRecorderPanelChip(label: segment),
-                            ],
-                          ),
-                        ),
-                      if (annotation != null && !widget.expanded)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Note: $annotation',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: cockpitRecorderCaptionStyle,
-                          ),
-                        ),
-                      if (reason != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            reason,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: cockpitRecorderCaptionStyle.copyWith(
-                              color: cockpitRecorderError,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _titleLine(),
+                  if (selector != null || settledAfterMs != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: <Widget>[
+                          if (selector != null)
+                            Expanded(
+                              child: Text(
+                                selector,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: cockpitRecorderSecondaryStyle,
+                              ),
+                            )
+                          else
+                            const Spacer(),
+                          if (settledAfterMs != null)
+                            Text(
+                              'settled ${settledAfterMs}ms',
+                              style: cockpitRecorderMicroStyle,
                             ),
-                          ),
+                        ],
+                      ),
+                    ),
+                  if (step.segments.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: <Widget>[
+                          for (final segment in step.segments)
+                            CockpitRecorderPanelChip(label: segment),
+                        ],
+                      ),
+                    ),
+                  if (annotation != null && !expanded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Note: $annotation',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: cockpitRecorderSecondaryStyle,
+                      ),
+                    ),
+                  if (reason != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        reason,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: cockpitRecorderSecondaryStyle.copyWith(
+                          color: cockpitRecorderError,
                         ),
-                      if (widget.expanded) _expandedDetail(),
-                    ],
-                  ),
-                ),
+                      ),
+                    ),
+                  if (expanded) _expandedDetail(),
+                ],
               ),
             ),
           ],
@@ -340,66 +301,42 @@ final class _TimelineRowState extends State<_TimelineRow> {
     );
   }
 
-  /// Line 1: the action verb with the short target, the delete affordance
-  /// or replay outcome plus relative time, and the expansion chevron.
+  /// Line 1: the action verb with the short target, and the delete
+  /// affordance (last row while recording) or the relative time.
   Widget _titleLine() {
-    final replay = widget.replay;
     return Row(
       children: <Widget>[
         Expanded(
           child: Text.rich(
             TextSpan(
-              text: _actionTitle(widget.step),
-              style: cockpitRecorderBodyStyle,
+              text: _actionTitle(step),
               children: <InlineSpan>[
-                if (_shortTarget(widget.step) case final target?)
-                  TextSpan(
-                    text: ' · $target',
-                    style: const TextStyle(
-                      color: cockpitRecorderInkSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                if (_shortTarget(step) case final target?)
+                  TextSpan(text: ' · $target'),
               ],
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: cockpitRecorderBodyStyle,
           ),
         ),
-        if (widget.isRecording && widget.isLast)
+        const SizedBox(width: 8),
+        if (isRecording && isLast)
           CockpitRecorderPanelButton(
-            label: 'Delete step',
-            onPressed: widget.canDelete ? widget.onDelete : null,
+            label: 'Delete',
+            onPressed: canDelete ? onDelete : null,
             variant: CockpitRecorderButtonVariant.text,
+            fontSize: 11,
             foreground: cockpitRecorderInkTertiary,
-            hoverForeground: cockpitRecorderError,
+            hoverForeground: cockpitRecorderRecord,
           )
-        else ...<Widget>[
-          if (replay != null)
-            Text(
-              replay.status.name,
-              style: cockpitRecorderCaptionStyle.copyWith(
-                color: _replayColor(replay.status),
-              ),
-            ),
-          const SizedBox(width: 6),
+        else
           Text(
-            _formatOffset(widget.offset),
-            style: cockpitRecorderMonoStyle.copyWith(
+            _formatOffset(offset),
+            style: cockpitRecorderSecondaryStyle.copyWith(
               color: cockpitRecorderInkTertiary,
             ),
           ),
-        ],
-        const SizedBox(width: 6),
-        AnimatedRotation(
-          turns: widget.expanded ? 0.25 : 0,
-          duration: const Duration(milliseconds: 150),
-          child: const Text(
-            '›',
-            style: TextStyle(color: cockpitRecorderInkTertiary, fontSize: 12),
-          ),
-        ),
       ],
     );
   }
@@ -407,7 +344,6 @@ final class _TimelineRowState extends State<_TimelineRow> {
   /// Expanded detail: the full locator candidate list and the inline note
   /// editor.
   Widget _expandedDetail() {
-    final step = widget.step;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(
@@ -415,50 +351,39 @@ final class _TimelineRowState extends State<_TimelineRow> {
         children: <Widget>[
           for (final candidate in step.locatorCandidates)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(bottom: 2),
               child: Row(
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '${candidate.kind} ${candidate.selector}',
+                      '${candidate.kind} · ${candidate.selector}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: cockpitRecorderMonoStyle,
+                      style: cockpitRecorderSecondaryStyle,
                     ),
                   ),
-                  Text(
-                    '${candidate.score}',
-                    style: cockpitRecorderMonoStyle.copyWith(
-                      color: cockpitRecorderInkTertiary,
-                    ),
-                  ),
+                  Text('${candidate.score}', style: cockpitRecorderMicroStyle),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: CockpitRecorderPanelTextField(
-                    controller: widget.noteController,
-                    hint: 'Add a note',
-                    onSubmitted: widget.canMutate
-                        ? widget.onSaveAnnotation
-                        : null,
-                  ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: CockpitRecorderPanelTextField(
+                  controller: noteController,
+                  hint: 'Add a note',
+                  onSubmitted: canMutate ? onSaveAnnotation : null,
                 ),
-                const SizedBox(width: 8),
-                CockpitRecorderPanelButton(
-                  label: 'Save',
-                  compact: true,
-                  onPressed: widget.canMutate
-                      ? () =>
-                            widget.onSaveAnnotation(widget.noteController.text)
-                      : null,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              CockpitRecorderPanelButton(
+                label: 'Save',
+                onPressed: canMutate
+                    ? () => onSaveAnnotation(noteController.text)
+                    : null,
+              ),
+            ],
           ),
         ],
       ),
@@ -466,52 +391,28 @@ final class _TimelineRowState extends State<_TimelineRow> {
   }
 
   Color _nodeColor() {
-    final replay = widget.replay;
+    final replay = this.replay;
     if (replay != null) {
       return _replayColor(replay.status);
     }
-    return widget.step.unresolved
+    return step.unresolved
         ? cockpitRecorderWarning
-        : cockpitRecorderBorderFocus;
+        : cockpitRecorderInkTertiary;
   }
 }
 
-/// The left spine: a continuous line through the row with the step's node.
-final class _Spine extends StatelessWidget {
-  const _Spine({required this.color});
+/// The 8px leading dot of a step row.
+final class _LeadingDot extends StatelessWidget {
+  const _LeadingDot({required this.color});
 
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 24,
-      child: Stack(
-        children: <Widget>[
-          const Positioned(
-            left: 11,
-            top: 0,
-            bottom: 0,
-            child: SizedBox(
-              width: 2,
-              child: ColoredBox(color: cockpitRecorderBorder),
-            ),
-          ),
-          Positioned(
-            left: 5,
-            top: 10,
-            child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(color: cockpitRecorderSurface0, width: 2),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -580,6 +481,6 @@ String _formatOffset(Duration offset) {
 
 Color _replayColor(CockpitReplayStatus status) => switch (status) {
   CockpitReplayStatus.passed => cockpitRecorderSuccess,
-  CockpitReplayStatus.deviated => cockpitRecorderError,
+  CockpitReplayStatus.deviated => cockpitRecorderRecord,
   CockpitReplayStatus.skipped => cockpitRecorderInkTertiary,
 };

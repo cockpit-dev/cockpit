@@ -52,7 +52,7 @@ final class CockpitRecorderIndicator extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 phase.name.toUpperCase(),
-                style: cockpitRecorderCaptionStyle.copyWith(
+                style: cockpitRecorderSecondaryStyle.copyWith(
                   color: cockpitRecorderIndicatorColor(phase),
                 ),
               ),
@@ -68,7 +68,7 @@ final class CockpitRecorderIndicator extends StatelessWidget {
 Color cockpitRecorderIndicatorColor(CockpitRecorderPhase phase) {
   return switch (phase) {
     CockpitRecorderPhase.idle => cockpitRecorderInkTertiary,
-    CockpitRecorderPhase.recording => cockpitRecorderError,
+    CockpitRecorderPhase.recording => cockpitRecorderRecord,
     CockpitRecorderPhase.paused => cockpitRecorderWarning,
     CockpitRecorderPhase.stopped => cockpitRecorderAccent,
   };

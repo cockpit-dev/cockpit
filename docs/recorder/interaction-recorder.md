@@ -231,16 +231,18 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
   engine — phase, step list, replay report, export bundle; all commands.
   Panels and custom hosts bind to it exclusively; nothing reaches the
   engine directly.
-- `CockpitRecorderPanel`: full-screen layout — header (phase badge, live
-  step/unresolved counters, close), context-primary control row (Start+name /
-  Pause+Stop / Resume+Stop, segments as a compact secondary row), the timeline
-  as the hero area (kind-colored rows, monospace locators, replay status badges
-  joined per step, annotate, delete-last), and a bottom bar (verify replay,
-  copy YAML, save via an injectable `CockpitRecorderExportGateway`; the
-  default writes the YAML to a caller-supplied directory with `dart:io`;
-  share-sheet affordances are the host's concern).
-- Default host `CockpitRecorderHost`: compact 40×40 draggable floating ball with edge
-  docking; expands into a panel sheet. Collapsed ball is a small REC
+- `CockpitRecorderPanel`: a mobile-HUD column on a solid dark surface —
+  a REC timer header (phase dot, a `REC {mm:ss}` clock recomputed on every
+  controller notification, step count, close), an iOS-list step flow (leading
+  dot, action title, selector line, replay outcomes tinting the dot, annotate,
+  delete-last), an action row (verify replay, copy YAML, save via an
+  injectable `CockpitRecorderExportGateway`; the default writes the YAML to a
+  caller-supplied directory with `dart:io`; share-sheet affordances are the
+  host's concern), and the current phase's session controls along the bottom.
+- Default host `CockpitRecorderHost`: compact 40×40 draggable dark floating
+  ball with edge docking; expands into a scrim-backed solid panel — a
+  full-width bottom sheet with a grab handle on phone-width windows, a
+  centered 480-wide solid card on wider ones. Collapsed ball is a small REC
   indicator. Host mode `guest` mounts no entry (panel content only, for
   embedding in an existing floating window); `headless` mounts nothing.
 

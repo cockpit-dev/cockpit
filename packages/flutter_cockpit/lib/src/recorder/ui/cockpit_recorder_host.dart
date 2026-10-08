@@ -29,8 +29,9 @@ Offset cockpitRecorderSnapBallPosition(
   );
 }
 
-/// Default recorder host: a draggable floating ball that expands into a
-/// centered card over a full-screen scrim.
+/// Default recorder host: a draggable dark floating ball that expands
+/// into a mobile-HUD overlay — a full-width bottom sheet with a grab handle
+/// on phone-width windows, a centered 480-wide solid card on wider ones.
 ///
 /// Mount topology (verified against `FlutterCockpitRootState.build`): the
 /// host mounts as a later `Stack` sibling *above* the capture-wrapped
@@ -53,8 +54,13 @@ final class CockpitRecorderHost extends StatefulWidget {
 
 final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
   static const Size _ballSize = Size(40, 40);
-  static const double _maxCardWidth = 840;
-  static const double _maxCardHeightFactor = 0.88;
+
+  /// Window widths up to this present the bottom-sheet form; wider ones
+  /// get the centered card.
+  static const double _sheetBreakpoint = 640;
+  static const double _sheetHeightFactor = 0.72;
+  static const double _cardWidth = 480;
+  static const double _cardMaxHeight = 620;
   static const Duration _snapAnimation = Duration(milliseconds: 200);
 
   /// Null until the first layout provides screen bounds; then the docked
@@ -125,7 +131,7 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                     ),
                   ),
                 ),
-                if (_expanded) _buildExpandedCard(),
+                if (_expanded) _buildExpandedOverlay(),
               ],
             ),
           );
@@ -150,7 +156,7 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: recording
-                      ? cockpitRecorderError
+                      ? cockpitRecorderRecord
                       : const Color(0x00000000),
                   width: 1.5,
                 ),
@@ -162,26 +168,60 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
     );
   }
 
-  /// The expanded state: a full-screen scrim with the recorder card
-  /// centered on it, capped at [_maxCardWidth] and 88% of the overlay
-  /// height so the app context stays visible around the card.
-  Widget _buildExpandedCard() {
+  /// The expanded state: a scrim over the app with the solid dark recorder
+  /// panel on top. The panel is a full-width bottom sheet capped at 72% of
+  /// the overlay height (with a grab handle) on windows up to
+  /// [_sheetBreakpoint] wide, and a centered compact card (480 wide, at
+  /// most 620 tall) on wider ones. Tapping the scrim does nothing —
+  /// closing goes through the header's close button.
+  Widget _buildExpandedOverlay() {
     return Positioned.fill(
       key: const ValueKey<String>('cockpit_recorder_fullscreen'),
-      child: Container(
+      child: ColoredBox(
         color: cockpitRecorderScrim,
         child: LayoutBuilder(
-          builder: (context, constraints) => Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: _maxCardWidth,
-                maxHeight: constraints.maxHeight * _maxCardHeightFactor,
+          builder: (context, constraints) {
+            final bounds = constraints.biggest;
+            final panel = CockpitRecorderPanel(
+              onClose: () => setState(() => _expanded = false),
+            );
+            if (bounds.width <= _sheetBreakpoint) {
+              return Align(
+                alignment: AlignmentDirectional.bottomCenter,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(cockpitRecorderSheetRadius),
+                  ),
+                  child: SizedBox(
+                    key: const ValueKey<String>('cockpit_recorder_panel_frame'),
+                    width: bounds.width,
+                    height: bounds.height * _sheetHeightFactor,
+                    child: Column(
+                      children: <Widget>[
+                        const _SheetGrabHandle(),
+                        Expanded(child: panel),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(cockpitRecorderSheetRadius),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: _cardWidth,
+                    maxHeight: _cardMaxHeight,
+                  ),
+                  child: SizedBox.expand(
+                    key: const ValueKey<String>('cockpit_recorder_panel_frame'),
+                    child: panel,
+                  ),
+                ),
               ),
-              child: CockpitRecorderPanel(
-                onClose: () => setState(() => _expanded = false),
-              ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -189,8 +229,9 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
 
   /// The root Stack builds above the app's `MaterialApp`, so the host
   /// provides its own text environment. The [MediaQuery] feeds
-  /// [EditableText]'s context-menu positioning; absence would only degrade
-  /// that menu, but view-derived data costs nothing.
+  /// [EditableText]'s context-menu positioning and the panel's bottom-inset
+  /// padding; absence would only degrade both, but view-derived data costs
+  /// nothing.
   Widget _buildTextEnvironment(Widget child) {
     final view = WidgetsBinding.instance.platformDispatcher.implicitView;
     return Directionality(
@@ -217,5 +258,29 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
       return position;
     }
     return cockpitRecorderSnapBallPosition(position, bounds, _ballSize);
+  }
+}
+
+/// The bottom sheet's grab handle: a 36×5 tertiary pill, centered, 8 from
+/// the sheet's top edge.
+final class _SheetGrabHandle extends StatelessWidget {
+  const _SheetGrabHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 21,
+      child: Center(
+        child: Container(
+          key: const ValueKey<String>('cockpit_recorder_sheet_handle'),
+          width: 36,
+          height: 5,
+          decoration: BoxDecoration(
+            color: cockpitRecorderInkTertiary,
+            borderRadius: BorderRadius.circular(2.5),
+          ),
+        ),
+      ),
+    );
   }
 }
