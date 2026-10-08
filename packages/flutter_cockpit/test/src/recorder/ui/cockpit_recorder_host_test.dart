@@ -326,7 +326,13 @@ void main() {
       await tester.pumpAndSettle();
       final idleHeight = tester.getRect(frame()).height;
 
+      // Starting the recording collapses the panel out of the way; re-open
+      // it to watch the feed grow.
       controller.start();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+
       for (var index = 0; index < 14; index += 1) {
         controller.recorder.recordInteractionStep(
           stepWithCandidates(CockpitInteractionStepKind.tap),
@@ -346,6 +352,82 @@ void main() {
         find.byKey(const ValueKey<String>('s14')).hitTestable(),
         findsOneWidget,
       );
+    });
+
+    testWidgets('starting a recording collapses the open panel', (
+      tester,
+    ) async {
+      final controller = await pumpHost(tester);
+
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(CockpitRecorderPanel), findsOneWidget);
+
+      controller.start();
+      await tester.pumpAndSettle();
+
+      // The HUD gets out of the way the moment recording begins so the
+      // user records the app, not the recorder.
+      expect(find.byType(CockpitRecorderPanel), findsNothing);
+      expect(controller.phase, CockpitRecorderPhase.recording);
+
+      // Re-opening mid-session shows the recording controls.
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Stop'), findsOneWidget);
+    });
+
+    testWidgets('the overlay fades and slides instead of blinking', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      // One frame lets the tap gesture resolve and the animation start.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Mid-expand: visible but not yet fully opaque, the panel still a
+      // touch below its resting place — and the one-shot animation settles
+      // to completion, keeping pumpAndSettle safe.
+      var fade = tester.widget<FadeTransition>(find.byType(FadeTransition));
+      expect(fade.opacity.value, greaterThan(0));
+      expect(fade.opacity.value, lessThan(1));
+      expect(
+        tester
+            .widget<SlideTransition>(find.byType(SlideTransition))
+            .position
+            .value
+            .dy,
+        greaterThan(0),
+      );
+      await tester.pumpAndSettle();
+      fade = tester.widget<FadeTransition>(find.byType(FadeTransition));
+      expect(fade.opacity.value, 1);
+      expect(
+        tester
+            .widget<SlideTransition>(find.byType(SlideTransition))
+            .position
+            .value,
+        Offset.zero,
+      );
+
+      await tester.tap(find.text('✕'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+
+      // Collapsing plays out before the overlay unmounts.
+      expect(find.byType(CockpitRecorderPanel), findsOneWidget);
+      expect(
+        tester
+            .widget<SlideTransition>(find.byType(SlideTransition))
+            .position
+            .value
+            .dy,
+        greaterThan(0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(CockpitRecorderPanel), findsNothing);
     });
 
     testWidgets('tapping the scrim keeps the panel open', (tester) async {

@@ -213,6 +213,16 @@ the target registry and executed with `CockpitGestureEngine.perform`
 or post-action observation mismatches. Replay pauses capture (a replay must
 not re-record itself) and restores the prior phase afterwards.
 
+Scrolls replay **goal-directed**, mirroring why a human scrolls: to bring
+the next actionable step's target into view. For each scroll the engine
+looks ahead — stopping at the next `routeChange`/`back` boundary — for the
+following locator-bearing step, then swipes in the recorded direction
+(at most 6 times ≈ five screens) until that target resolves in the
+registry; a swipe that cannot resolve the scroll's own candidate falls
+back to the recorded grab coordinates as its origin. A scroll that both
+lacks a candidate and reveals nothing (a trailing flick) is skipped rather
+than blocking the flow.
+
 ## Panel components and host abstraction (`flutter_cockpit`, `lib/src/recorder/ui/`)
 
 The four public host surfaces (documented in the host integration guide):
@@ -232,9 +242,10 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
   Panels and custom hosts bind to it exclusively; nothing reaches the
   engine directly.
 - `CockpitRecorderPanel`: a mobile-HUD column on a solid dark surface that
-  sizes to its content (hosts cap the height) — a stopwatch hero header
-  (phase dot, a `{mm:ss}` clock recomputed on every controller notification
-  and frozen once stopped, phase/step caption, close), an iOS-receipt step
+  sizes to its content (hosts cap the height) — a step-count hero header
+  (phase dot, the session's step count as the largest type with a quiet
+  `{mm:ss}` clock in the phase caption, recomputed on every controller
+  notification and frozen once stopped, close), an iOS-receipt step
   flow (leading glyph tile whose stroke carries replay and resolution state,
   action title, selector line, annotate, delete-last; segment tools under a
   collapsed `+ Add segment` affordance), a quiet export row (verify replay,
@@ -246,9 +257,14 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
   ball with edge docking; expands into a scrim-backed solid panel — a
   full-width bottom sheet with a grab handle on phone-width windows, a
   centered 480-wide card on wider ones, both hugging their content up to a
-  height cap. Collapsed ball is a small REC indicator. Host mode `guest`
-  mounts no entry (panel content only, for embedding in an existing floating
-  window); `headless` mounts nothing.
+  height cap. The overlay fades in while the panel rises a touch (220 ms
+  ease-out) and plays the reverse on collapse (180 ms ease-in, unmounting
+  only after it finishes); both are one-shot, so nothing keeps scheduling
+  frames once settled. The moment a session transitions into recording
+  (start, resume, record-again) the panel collapses out of the way so the
+  user records the app, not the recorder. Collapsed ball is a small REC
+  indicator. Host mode `guest` mounts no entry (panel content only, for
+  embedding in an existing floating window); `headless` mounts nothing.
 
 ## Converter (`cockpit_protocol`, `lib/src/recorder/`)
 
@@ -256,13 +272,21 @@ CockpitRecorderExclude(child: …);       // host chrome exclusion marker
 `CockpitTestCase` (built through the existing `lib/src/test/` templates so
 the document is schema-valid by construction):
 
-- `unresolved` steps are dropped.
+- `unresolved` steps are dropped — except scrolls, which usually start on
+  unregistered list content: a scroll survives when the following action
+  lends it a locator (below).
 - `tap`/`longPress`/`text`/`scroll` map to the corresponding action step
-  with the primary locator; remaining candidates become the locator's
-  `fallbacks` chain.
-- A `scroll` step immediately preceding a `tap` whose target it revealed is
-  folded into a scroll-then-tap prelude (the same pattern the handwritten
-  integration tests use).
+  (`scroll` → `scrollUntilVisible`) with the primary locator; remaining
+  candidates become the locator's `fallbacks` chain.
+- **Scroll locator borrowing**: a recorded scroll exists to bring the *next*
+  actionable step's target into view, and the finger usually lands on list
+  content that has no useful locator of its own. Walking the steps
+  backwards, each scroll is retargeted to the primary locator of the next
+  locator-bearing action after it (`routeChange`/`back` boundaries stop the
+  search — a scroll belongs to the screen it happened on). A scroll that
+  ends up with neither its own candidate nor a borrowed one is dropped, and
+  the weak assertion after a scroll is skipped when the very next step
+  targets the same locator it just scrolled to reveal.
 - `routeChange` → `waitForRoute`; `back` → back action; `marker` steps
   delimit `setup` (everything in the segment named `setup`, if marked) from
   `steps`.

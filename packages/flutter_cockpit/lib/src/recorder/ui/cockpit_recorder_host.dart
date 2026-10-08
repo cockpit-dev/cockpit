@@ -52,7 +52,8 @@ final class CockpitRecorderHost extends StatefulWidget {
   State<CockpitRecorderHost> createState() => _CockpitRecorderHostState();
 }
 
-final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
+final class _CockpitRecorderHostState extends State<CockpitRecorderHost>
+    with SingleTickerProviderStateMixin {
   static const Size _ballSize = Size(40, 40);
 
   /// Window widths up to this present the bottom-sheet form; wider ones
@@ -62,12 +63,91 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
   static const double _cardWidth = 480;
   static const double _cardMaxHeight = 620;
   static const Duration _snapAnimation = Duration(milliseconds: 200);
+  static const Duration _expandAnimation = Duration(milliseconds: 220);
+  static const Duration _collapseAnimation = Duration(milliseconds: 180);
+
+  late final AnimationController _overlayController = AnimationController(
+    vsync: this,
+    duration: _expandAnimation,
+    reverseDuration: _collapseAnimation,
+  );
+  late final CurvedAnimation _overlayCurve = CurvedAnimation(
+    parent: _overlayController,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
 
   /// Null until the first layout provides screen bounds; then the docked
   /// default (right edge, 70% down).
   Offset? _ballPosition;
+
+  /// True while the overlay subtree should exist: from the expand tap until
+  /// the collapse animation has fully played out, so the panel slides away
+  /// instead of blinking out.
   bool _expanded = false;
   bool _dragging = false;
+
+  /// The phase seen by the previous controller notification, so collapse
+  /// triggers on the *transition* into recording — not on every step the
+  /// recording session later records while the panel happens to be open.
+  /// Initialized in [initState] (a lazy `late` initializer would first run
+  /// during a notification, when the transition it should observe is
+  /// already over).
+  CockpitRecorderPhase _observedPhase = CockpitRecorderPhase.idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _observedPhase = widget.controller.phase;
+    widget.controller.addListener(_handleControllerNotification);
+    _overlayController.addStatusListener(_handleOverlayStatus);
+  }
+
+  @override
+  void didUpdateWidget(covariant CockpitRecorderHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_handleControllerNotification);
+      widget.controller.addListener(_handleControllerNotification);
+      _observedPhase = widget.controller.phase;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleControllerNotification);
+    _overlayCurve.dispose();
+    _overlayController.dispose();
+    super.dispose();
+  }
+
+  /// Recording begins with the panel collapsed: the HUD gets out of the way
+  /// so the user records the app, not the recorder.
+  void _handleControllerNotification() {
+    final phase = widget.controller.phase;
+    final beganRecording =
+        phase == CockpitRecorderPhase.recording &&
+        _observedPhase != CockpitRecorderPhase.recording;
+    _observedPhase = phase;
+    if (_expanded && beganRecording) {
+      _collapseOverlay();
+    }
+  }
+
+  void _handleOverlayStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && _expanded) {
+      setState(() => _expanded = false);
+    }
+  }
+
+  void _expandOverlay() {
+    setState(() => _expanded = true);
+    _overlayController.forward();
+  }
+
+  void _collapseOverlay() {
+    _overlayController.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +196,8 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                       clipBehavior: Clip.none,
                       children: <Widget>[
                         CockpitRecorderEntryButton(
-                          onTap: () => setState(() => _expanded = !_expanded),
+                          onTap: () =>
+                              _expanded ? _collapseOverlay() : _expandOverlay(),
                         ),
                         _buildRecordingRing(),
                         Positioned(
@@ -173,70 +254,88 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
   /// reads as a compact receipt, not a mostly-empty frame — capped at 72%
   /// of the overlay height on windows up to [_sheetBreakpoint] wide (a
   /// full-width bottom sheet with a grab handle), and at 480×620 on wider
-  /// ones (a centered card). Tapping the scrim does nothing — closing goes
-  /// through the header's close button.
+  /// ones (a centered card). The whole overlay fades in while the panel
+  /// rises a touch, and plays the reverse on collapse; both are one-shot,
+  /// so nothing keeps scheduling frames once settled. Tapping the scrim
+  /// does nothing — closing goes through the header's close button.
   Widget _buildExpandedOverlay() {
     return Positioned.fill(
       key: const ValueKey<String>('cockpit_recorder_fullscreen'),
-      child: ColoredBox(
-        color: cockpitRecorderScrim,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final bounds = constraints.biggest;
-            final panel = CockpitRecorderPanel(
-              onClose: () => setState(() => _expanded = false),
-            );
-            if (bounds.width <= _sheetBreakpoint) {
-              return Align(
-                alignment: AlignmentDirectional.bottomCenter,
-                child: ClipPath(
-                  clipper: const ShapeBorderClipper(
-                    shape: cockpitRecorderSheetTopShape,
-                  ),
-                  child: ConstrainedBox(
-                    key: const ValueKey<String>('cockpit_recorder_panel_frame'),
-                    constraints: BoxConstraints(
-                      maxHeight: bounds.height * _sheetHeightFactor,
+      child: FadeTransition(
+        opacity: _overlayCurve,
+        child: ColoredBox(
+          color: cockpitRecorderScrim,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bounds = constraints.biggest;
+              final panel = CockpitRecorderPanel(onClose: _collapseOverlay);
+              Widget slide(Widget child) => SlideTransition(
+                position: _overlayCurve.drive(
+                  Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero),
+                ),
+                child: child,
+              );
+              if (bounds.width <= _sheetBreakpoint) {
+                return slide(
+                  Align(
+                    alignment: AlignmentDirectional.bottomCenter,
+                    child: ClipPath(
+                      clipper: const ShapeBorderClipper(
+                        shape: cockpitRecorderSheetTopShape,
+                      ),
+                      child: ConstrainedBox(
+                        key: const ValueKey<String>(
+                          'cockpit_recorder_panel_frame',
+                        ),
+                        constraints: BoxConstraints(
+                          maxHeight: bounds.height * _sheetHeightFactor,
+                        ),
+                        child: SizedBox(
+                          width: bounds.width,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              const _SheetGrabHandle(),
+                              // Flexible carries the height cap into the
+                              // panel: a min-size Column hands non-flex
+                              // children an unbounded main axis, which would
+                              // let the feed grow past the cap instead of
+                              // scrolling.
+                              Flexible(child: panel),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    child: SizedBox(
-                      width: bounds.width,
+                  ),
+                );
+              }
+              return slide(
+                Center(
+                  child: ClipPath(
+                    clipper: const ShapeBorderClipper(
+                      shape: cockpitRecorderSheetShape,
+                    ),
+                    child: ConstrainedBox(
+                      key: const ValueKey<String>(
+                        'cockpit_recorder_panel_frame',
+                      ),
+                      constraints: const BoxConstraints(
+                        maxWidth: _cardWidth,
+                        maxHeight: _cardMaxHeight,
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          const _SheetGrabHandle(),
-                          // Flexible carries the height cap into the panel:
-                          // a min-size Column hands non-flex children an
-                          // unbounded main axis, which would let the feed
-                          // grow past the cap instead of scrolling.
-                          Flexible(child: panel),
-                        ],
+                        children: <Widget>[Flexible(child: panel)],
                       ),
                     ),
                   ),
                 ),
               );
-            }
-            return Center(
-              child: ClipPath(
-                clipper: const ShapeBorderClipper(
-                  shape: cockpitRecorderSheetShape,
-                ),
-                child: ConstrainedBox(
-                  key: const ValueKey<String>('cockpit_recorder_panel_frame'),
-                  constraints: const BoxConstraints(
-                    maxWidth: _cardWidth,
-                    maxHeight: _cardMaxHeight,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[Flexible(child: panel)],
-                  ),
-                ),
-              ),
-            );
-          },
+            },
+          ),
         ),
       ),
     );

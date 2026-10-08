@@ -12,7 +12,7 @@ import 'cockpit_recorder_scope.dart';
 import 'cockpit_recorder_timeline.dart';
 
 /// Embeddable recorder panel: a floating-HUD column over the
-/// [CockpitRecorderScope] controller — a stopwatch hero header, the live
+/// [CockpitRecorderScope] controller — a step-count hero header, the live
 /// step receipt, a quiet export row, and the current phase's thumb
 /// controls at the bottom.
 ///
@@ -68,12 +68,12 @@ final class _Hairline extends StatelessWidget {
   }
 }
 
-/// Hero header: the live phase dot beside the session clock — the
-/// recorder's identity, so it is the largest type on the panel — with the
-/// phase and step count as a quiet caption, and the close button for hosts
-/// that can collapse. The elapsed time is recomputed on every controller
+/// Hero header: the live phase dot beside the session's step count — what
+/// the recorder is here to produce, so it is the largest type on the panel —
+/// with the phase and elapsed clock as a quiet caption, and the close button
+/// for hosts that can collapse. The clock is recomputed on every controller
 /// notification; no timer drives it, so host app tests keep settling, and
-/// the stopped clock freezes at the session's end.
+/// the paused/stopped clock freezes at the session's boundary.
 final class _HeroHeader extends StatelessWidget {
   const _HeroHeader({required this.controller, this.onClose});
 
@@ -94,14 +94,33 @@ final class _HeroHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(
-                  session == null ? 'Recorder' : _clock,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: session == null
-                      ? cockpitRecorderHeroStyle
-                      : cockpitRecorderTimerStyle,
-                ),
+                if (session == null)
+                  Text(
+                    'Recorder',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: cockpitRecorderHeroStyle,
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: <Widget>[
+                      Text(
+                        '${session.stepCount}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: cockpitRecorderTimerStyle,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        session.stepCount == 1 ? 'step' : 'steps',
+                        style: cockpitRecorderSecondaryStyle.copyWith(
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 2),
                 Text(
                   _caption,
@@ -139,16 +158,13 @@ final class _HeroHeader extends StatelessWidget {
   }
 
   String get _caption {
-    final session = controller.session;
-    if (session == null) {
+    if (controller.session == null) {
       return 'Record a flow as a cockpit.test case';
     }
-    final steps =
-        '${session.stepCount} ${session.stepCount == 1 ? 'step' : 'steps'}';
     return switch (controller.phase) {
-      CockpitRecorderPhase.recording => 'Recording · $steps',
-      CockpitRecorderPhase.paused => 'Paused · $steps',
-      CockpitRecorderPhase.stopped => 'Stopped · $steps',
+      CockpitRecorderPhase.recording => 'Recording · $_clock',
+      CockpitRecorderPhase.paused => 'Paused · $_clock',
+      CockpitRecorderPhase.stopped => 'Stopped · $_clock',
       CockpitRecorderPhase.idle => 'Record a flow as a cockpit.test case',
     };
   }

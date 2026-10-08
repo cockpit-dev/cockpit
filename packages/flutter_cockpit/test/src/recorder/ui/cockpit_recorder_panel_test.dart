@@ -23,36 +23,39 @@ void main() {
       expect(find.text('RECORDING'), findsNothing);
     });
 
-    testWidgets('switches the hero clock and caption through the phases', (
-      tester,
-    ) async {
-      final controller = await pumpPanel(tester);
+    testWidgets(
+      'switches the hero step count and caption clock through the phases',
+      (tester) async {
+        final controller = await pumpPanel(tester);
 
-      controller.start();
-      await tester.pump();
+        controller.start();
+        await tester.pump();
 
-      // The clock is recomputed per controller notification: a fresh
-      // session reads 00:00, with the phase and count in the caption.
-      expect(find.text('00:00'), findsOneWidget);
-      expect(find.text('Recording · 0 steps'), findsOneWidget);
+        // The step count is the hero; the phase and clock sit in the caption.
+        expect(find.text('0'), findsOneWidget);
+        expect(find.text('steps'), findsOneWidget);
+        expect(find.text('Recording · 00:00'), findsOneWidget);
 
-      controller.recorder.recordInteractionStep(
-        unresolvedStep(CockpitInteractionStepKind.tap),
-      );
-      await tester.pump();
-      expect(find.text('Recording · 1 step'), findsOneWidget);
+        controller.recorder.recordInteractionStep(
+          unresolvedStep(CockpitInteractionStepKind.tap),
+        );
+        await tester.pump();
+        expect(find.text('1'), findsOneWidget);
+        expect(find.text('step'), findsOneWidget);
+        expect(find.text('Recording · 00:00'), findsOneWidget);
 
-      controller.pause();
-      await tester.pump();
-      expect(find.text('Paused · 1 step'), findsOneWidget);
+        controller.pause();
+        await tester.pump();
+        expect(find.text('Paused · 00:00'), findsOneWidget);
 
-      controller.stop();
-      await tester.pump();
-      expect(find.text('Stopped · 1 step'), findsOneWidget);
-      // The stopped clock freezes at the session's end instead of tracking
-      // whatever notification arrives next.
-      expect(find.text('00:00'), findsOneWidget);
-    });
+        controller.stop();
+        await tester.pump();
+        expect(find.text('Stopped · 00:00'), findsOneWidget);
+        // The stopped clock freezes at the session's end instead of tracking
+        // whatever notification arrives next.
+        expect(find.text('1'), findsOneWidget);
+      },
+    );
 
     testWidgets('embedded panels render no close button', (tester) async {
       await pumpPanel(tester);
