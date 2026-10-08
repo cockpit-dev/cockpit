@@ -11,16 +11,16 @@ import 'cockpit_recorder_panel_widgets.dart';
 import 'cockpit_recorder_scope.dart';
 import 'cockpit_recorder_timeline.dart';
 
-/// Embeddable recorder panel: a fixed header strip, a control row, the
-/// timeline hero, and a bottom action bar over the [CockpitRecorderScope]
-/// controller.
+/// Embeddable recorder panel: a card with a header strip, a phase toolbar,
+/// the timeline hero, and a footer action bar over the
+/// [CockpitRecorderScope] controller.
 ///
-/// Designed for a sized container — the default floating-ball host's
-/// full-screen overlay, or a host's own floating window. [onClose] is
-/// optional: hosts that can collapse the panel pass a callback and get the
-/// header's close button. All status and error reporting is inline text
-/// within the panel; nothing depends on Scaffold snackbars or
-/// OverlayEntry windows.
+/// Designed for a sized container — the default floating-ball host centers
+/// it over a full-screen scrim, and a host's own floating window can embed
+/// it directly. [onClose] is optional: hosts that can collapse the panel
+/// pass a callback and get the header's close button. All status and error
+/// reporting is inline text within the panel; nothing depends on Scaffold
+/// snackbars or OverlayEntry windows.
 final class CockpitRecorderPanel extends StatelessWidget {
   /// Creates a recorder panel with an optional header close button.
   const CockpitRecorderPanel({this.onClose, super.key});
@@ -32,30 +32,28 @@ final class CockpitRecorderPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = CockpitRecorderScope.of(context);
     return Container(
-      color: cockpitRecorderPanelBackground,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: cockpitRecorderSurface0,
+        border: Border.all(color: cockpitRecorderBorder),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
       child: ListenableBuilder(
         listenable: controller,
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _HeaderArea(controller: controller, onClose: onClose),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    _ControlArea(controller: controller),
-                    const _PanelDivider(),
-                    Expanded(
-                      child: CockpitRecorderTimeline(controller: controller),
-                    ),
-                    const _PanelDivider(),
-                    _BottomBar(controller: controller),
-                  ],
-                ),
-              ),
-            ),
+            _HeaderBar(controller: controller, onClose: onClose),
+            _Toolbar(controller: controller),
+            Expanded(child: CockpitRecorderTimeline(controller: controller)),
+            _FooterBar(controller: controller),
           ],
         ),
       ),
@@ -63,25 +61,11 @@ final class CockpitRecorderPanel extends StatelessWidget {
   }
 }
 
-final class _PanelDivider extends StatelessWidget {
-  const _PanelDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: SizedBox(
-        height: 1,
-        child: ColoredBox(color: cockpitRecorderPanelBorder),
-      ),
-    );
-  }
-}
-
-/// Fixed-height title strip: recorder identity, phase badge, live step
-/// counters, and — for hosts that can collapse — the close button.
-final class _HeaderArea extends StatelessWidget {
-  const _HeaderArea({required this.controller, this.onClose});
+/// Fixed-height title strip: recorder identity with live phase dot, the
+/// session name, live step counters, and — for hosts that can collapse —
+/// the close button.
+final class _HeaderBar extends StatelessWidget {
+  const _HeaderBar({required this.controller, this.onClose});
 
   final CockpitRecorderController controller;
   final VoidCallback? onClose;
@@ -89,71 +73,85 @@ final class _HeaderArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = controller.session;
+    final sessionName = controller.recorder.sessionName?.trim();
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const BoxDecoration(
-        color: cockpitRecorderPanelSurface,
-        border: Border(bottom: BorderSide(color: cockpitRecorderPanelBorder)),
+        color: cockpitRecorderSurface1,
+        border: Border(bottom: BorderSide(color: cockpitRecorderBorder)),
       ),
       child: Row(
         children: <Widget>[
-          Text(
-            'COCKPIT RECORDER',
-            style: cockpitRecorderPanelCaptionStyle.copyWith(
-              color: cockpitRecorderPanelText,
+          CockpitRecorderIndicator(controller: controller, showLabel: false),
+          const SizedBox(width: 8),
+          const Text('Recorder', style: cockpitRecorderTitleStyle),
+          if (sessionName != null && sessionName.isNotEmpty) ...<Widget>[
+            Flexible(
+              child: Text(
+                ' · $sessionName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: cockpitRecorderInkSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          CockpitRecorderIndicator(controller: controller),
+          ],
           const Spacer(),
-          Flexible(
-            child: Text(
-              session == null
-                  ? 'no session'
-                  : '${session.stepCount} steps · '
-                        '${session.unresolvedCount} unresolved',
+          if (session != null) ...<Widget>[
+            Text(
+              '${session.stepCount} steps · '
+              '${session.unresolvedCount} unresolved',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: cockpitRecorderPanelCaptionStyle,
+              style: cockpitRecorderMonoStyle.copyWith(
+                color: cockpitRecorderInkTertiary,
+              ),
             ),
-          ),
-          if (onClose != null) ...<Widget>[
             const SizedBox(width: 8),
-            CockpitRecorderPanelButton(label: '✕', onPressed: onClose),
           ],
+          if (onClose != null)
+            CockpitRecorderPanelCloseButton(onPressed: onClose!),
         ],
       ),
     );
   }
 }
 
-/// Control area: the current phase's primary session commands on one row
-/// (the recording-name field beside Start while idle, the segment field
-/// while recording), and — while recording — the compact segment controls
-/// on a secondary row below, showing the open segments.
-///
-/// The segment buttons sit below the main row, not beside it: on embedded
-/// panel widths the fixed-width buttons would overflow a single row.
-final class _ControlArea extends StatefulWidget {
-  const _ControlArea({required this.controller});
+/// Phase toolbar: the current phase's session commands on one row (the
+/// session-name field beside Record while idle, the segment field while
+/// recording), and — while recording — the open-segment chips with the
+/// segment end command on a secondary row below.
+final class _Toolbar extends StatefulWidget {
+  const _Toolbar({required this.controller});
 
   final CockpitRecorderController controller;
 
   @override
-  State<_ControlArea> createState() => _ControlAreaState();
+  State<_Toolbar> createState() => _ToolbarState();
 }
 
-final class _ControlAreaState extends State<_ControlArea> {
+final class _ToolbarState extends State<_Toolbar> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _segmentController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _segmentController.addListener(_handleSegmentTextChange);
+  }
+
+  @override
   void dispose() {
+    _segmentController.removeListener(_handleSegmentTextChange);
     _nameController.dispose();
     _segmentController.dispose();
     super.dispose();
   }
+
+  void _handleSegmentTextChange() => setState(() {});
 
   void _start() {
     widget.controller.start(_nameController.text);
@@ -172,99 +170,125 @@ final class _ControlAreaState extends State<_ControlArea> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            if (controller.canStart) ...<Widget>[
-              CockpitRecorderPanelButton(label: 'Start', onPressed: _start),
-              const SizedBox(width: 8),
-              Expanded(
-                child: CockpitRecorderPanelTextField(
-                  controller: _nameController,
-                  hint: 'recording name',
-                  onSubmitted: (_) => _start(),
-                ),
-              ),
-            ] else ...<Widget>[
-              if (controller.canPause) ...<Widget>[
+    return Container(
+      decoration: const BoxDecoration(
+        color: cockpitRecorderSurface1,
+        border: Border(bottom: BorderSide(color: cockpitRecorderBorder)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              if (controller.canStart) ...<Widget>[
                 CockpitRecorderPanelButton(
-                  label: 'Pause',
-                  onPressed: controller.pause,
+                  label: 'Record',
+                  onPressed: _start,
+                  variant: CockpitRecorderButtonVariant.primary,
                 ),
-                const SizedBox(width: 6),
-              ],
-              if (controller.canResume) ...<Widget>[
-                CockpitRecorderPanelButton(
-                  label: 'Resume',
-                  onPressed: controller.resume,
-                ),
-                const SizedBox(width: 6),
-              ],
-              if (controller.canStop)
-                CockpitRecorderPanelButton(
-                  label: 'Stop',
-                  onPressed: controller.stop,
-                ),
-              if (controller.phase ==
-                  CockpitRecorderPhase.recording) ...<Widget>[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: CockpitRecorderPanelTextField(
-                    controller: _segmentController,
-                    hint: 'segment label',
-                    onSubmitted: (_) => _beginSegment(),
+                if (controller.phase == CockpitRecorderPhase.idle) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CockpitRecorderPanelTextField(
+                      controller: _nameController,
+                      hint: 'Session name (optional)',
+                      onSubmitted: (_) => _start(),
+                    ),
                   ),
-                ),
+                ],
+              ] else ...<Widget>[
+                if (controller.canPause) ...<Widget>[
+                  CockpitRecorderPanelButton(
+                    label: 'Pause',
+                    onPressed: controller.pause,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (controller.canResume) ...<Widget>[
+                  CockpitRecorderPanelButton(
+                    label: 'Resume',
+                    onPressed: controller.resume,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (controller.canStop)
+                  CockpitRecorderPanelButton(
+                    label: 'Stop',
+                    onPressed: controller.stop,
+                  ),
+                if (controller.phase ==
+                    CockpitRecorderPhase.recording) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CockpitRecorderPanelTextField(
+                      controller: _segmentController,
+                      hint: 'New segment label',
+                      onSubmitted: (_) => _beginSegment(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CockpitRecorderPanelButton(
+                    label: 'Add segment',
+                    onPressed: _segmentController.text.trim().isEmpty
+                        ? null
+                        : _beginSegment,
+                    variant: CockpitRecorderButtonVariant.text,
+                  ),
+                ],
               ],
             ],
-          ],
-        ),
-        if (controller.phase == CockpitRecorderPhase.recording)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: <Widget>[
-                CockpitRecorderPanelButton(
-                  label: 'Begin segment',
-                  onPressed: _beginSegment,
-                ),
-                CockpitRecorderPanelButton(
-                  label: 'End segment',
-                  onPressed: controller.openSegments.isNotEmpty
-                      ? controller.endSegment
-                      : null,
-                ),
-                for (final segment in controller.openSegments)
-                  CockpitRecorderPanelChip(
-                    label: segment,
-                    color: cockpitRecorderPanelAccent,
-                  ),
-              ],
-            ),
           ),
-      ],
+          if (controller.phase == CockpitRecorderPhase.recording)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  for (final segment in controller.openSegments)
+                    CockpitRecorderPanelChip(label: segment),
+                  CockpitRecorderPanelButton(
+                    label: 'End segment',
+                    onPressed: controller.openSegments.isNotEmpty
+                        ? controller.endSegment
+                        : null,
+                    variant: CockpitRecorderButtonVariant.text,
+                  ),
+                ],
+              ),
+            ),
+          if (controller.phase == CockpitRecorderPhase.stopped)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Session stopped — export below or record again.',
+                style: cockpitRecorderCaptionStyle.copyWith(
+                  color: cockpitRecorderInkTertiary,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-/// Bottom action bar: verify-replay, copy, and save — each one click, the
-/// bundle export folded into copy and save — plus an inline status line
-/// for the last case, copy confirmation, save path, replay tally, and
-/// command errors.
-final class _BottomBar extends StatefulWidget {
-  const _BottomBar({required this.controller});
+/// Footer action bar: verify-replay, copy, and save — each one click, the
+/// bundle export folded into copy and save — an inline error banner, and a
+/// status line for the last case, copy confirmation, save path, and replay
+/// tally.
+final class _FooterBar extends StatefulWidget {
+  const _FooterBar({required this.controller});
 
   final CockpitRecorderController controller;
 
   @override
-  State<_BottomBar> createState() => _BottomBarState();
+  State<_FooterBar> createState() => _FooterBarState();
 }
 
-final class _BottomBarState extends State<_BottomBar> {
+final class _FooterBarState extends State<_FooterBar> {
   static const Duration _copyConfirmationDuration = Duration(seconds: 2);
 
   Timer? _copyReset;
@@ -310,67 +334,95 @@ final class _BottomBarState extends State<_BottomBar> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final error = controller.lastError;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            CockpitRecorderPanelButton(
-              label: controller.isReplaying ? 'Replaying…' : 'Verify replay',
-              onPressed: controller.canVerifyReplay
-                  ? controller.verifyReplay
-                  : null,
-            ),
-            const SizedBox(width: 6),
-            CockpitRecorderPanelButton(
-              label: 'Copy YAML',
-              onPressed: controller.session != null ? _copyYaml : null,
-            ),
-            const SizedBox(width: 6),
-            CockpitRecorderPanelButton(
-              label: controller.isSaving ? 'Saving…' : 'Save',
-              onPressed: controller.session != null && !controller.isSaving
-                  ? _save
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _statusLine(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: cockpitRecorderPanelCaptionStyle,
+    return Container(
+      decoration: const BoxDecoration(
+        color: cockpitRecorderSurface1,
+        border: Border(top: BorderSide(color: cockpitRecorderBorder)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: cockpitRecorderErrorSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        error,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: cockpitRecorderCaptionStyle.copyWith(
+                          color: cockpitRecorderError,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    CockpitRecorderPanelButton(
+                      label: 'Dismiss',
+                      onPressed: controller.clearError,
+                      variant: CockpitRecorderButtonVariant.text,
+                      foreground: cockpitRecorderError,
+                      hoverForeground: cockpitRecorderError,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
+          Row(
+            children: <Widget>[
+              CockpitRecorderPanelButton(
+                label: controller.isReplaying ? 'Replaying…' : 'Verify replay',
+                onPressed: controller.canVerifyReplay
+                    ? controller.verifyReplay
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              CockpitRecorderPanelButton(
+                label: _copied ? 'Copied' : 'Copy YAML',
+                onPressed: controller.session != null ? _copyYaml : null,
+                foreground: _copied
+                    ? cockpitRecorderSuccess
+                    : cockpitRecorderInkPrimary,
+              ),
+              const SizedBox(width: 8),
+              CockpitRecorderPanelButton(
+                label: controller.isSaving ? 'Saving…' : 'Save',
+                onPressed: controller.session != null && !controller.isSaving
+                    ? _save
+                    : null,
+              ),
+              if (_statusLine case final statusLine?) ...<Widget>[
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    error,
-                    style: cockpitRecorderPanelCaptionStyle.copyWith(
-                      color: cockpitRecorderPanelDanger,
+                    statusLine,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: cockpitRecorderCaptionStyle.copyWith(
+                      color: cockpitRecorderInkTertiary,
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                CockpitRecorderPanelButton(
-                  label: 'Dismiss',
-                  onPressed: controller.clearError,
-                ),
               ],
-            ),
+            ],
           ),
-      ],
+        ],
+      ),
     );
   }
 
-  String _statusLine() {
+  String? get _statusLine {
     final controller = widget.controller;
     final caseId = controller.lastBundle?.caseDocument['id'];
     final reports = controller.replayReports;
@@ -397,6 +449,6 @@ final class _BottomBarState extends State<_BottomBar> {
       if (reports != null)
         'replay: $passed passed · $deviated deviated · $skipped skipped',
     ];
-    return parts.isEmpty ? 'no bundle yet' : parts.join(' · ');
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 }

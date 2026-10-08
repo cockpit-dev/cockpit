@@ -3,11 +3,12 @@ import 'package:flutter/widgets.dart';
 import 'cockpit_recorder_panel_widgets.dart';
 
 /// Presentational entry button for recorder hosts: a compact dark circle
-/// with a record dot.
+/// with a neutral record dot.
 ///
 /// Purely visual — [onTap] does nothing but invoke the callback, so hosts
 /// decide what opening means (the default floating-ball host expands its
-/// panel sheet). The live phase color belongs to
+/// panel card). The dot stays neutral ink: a permanently red dot would lie
+/// about the recorder's state. The live phase color belongs to
 /// [CockpitRecorderIndicator], which hosts compose next to this button.
 final class CockpitRecorderEntryButton extends StatelessWidget {
   /// Creates an entry button invoking [onTap] when tapped.
@@ -26,9 +27,9 @@ final class CockpitRecorderEntryButton extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: cockpitRecorderPanelBackground,
+            color: cockpitRecorderSurface0,
             shape: BoxShape.circle,
-            border: Border.all(color: cockpitRecorderPanelBorder, width: 1.5),
+            border: Border.all(color: cockpitRecorderBorder, width: 1.5),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x66000000),
@@ -39,11 +40,11 @@ final class CockpitRecorderEntryButton extends StatelessWidget {
           ),
           child: const Center(
             child: SizedBox(
-              width: 12,
-              height: 12,
+              width: 10,
+              height: 10,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: cockpitRecorderPanelDanger,
+                  color: cockpitRecorderInkPrimary,
                   shape: BoxShape.circle,
                 ),
               ),

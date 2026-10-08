@@ -193,7 +193,7 @@ void main() {
       expect(marker, isA<CockpitRecorderExcludeRenderObject>());
     });
 
-    testWidgets('tap expands the full-screen panel and close collapses it', (
+    testWidgets('tap expands the card overlay and close collapses it', (
       tester,
     ) async {
       await pumpHost(tester);
@@ -201,23 +201,23 @@ void main() {
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pumpAndSettle();
 
-      final fullscreen = find.byKey(
+      final scrim = find.byKey(
         const ValueKey<String>('cockpit_recorder_fullscreen'),
       );
-      expect(fullscreen, findsOneWidget);
-      // The overlay occupies the whole window — no partial card.
-      expect(tester.getRect(fullscreen), const Rect.fromLTWH(0, 0, 800, 600));
+      expect(scrim, findsOneWidget);
+      // The scrim occupies the whole window — no partial card.
+      expect(tester.getRect(scrim), const Rect.fromLTWH(0, 0, 800, 600));
       expect(find.byType(CockpitRecorderPanel), findsOneWidget);
-      expect(find.text('no session'), findsOneWidget);
+      expect(find.text('Recorder'), findsOneWidget);
 
       await tester.tap(find.text('✕'));
       await tester.pumpAndSettle();
 
-      expect(fullscreen, findsNothing);
+      expect(scrim, findsNothing);
       expect(find.byType(CockpitRecorderPanel), findsNothing);
     });
 
-    testWidgets('caps the panel width and centers it on ultra-wide windows', (
+    testWidgets('centers an 840-wide card at 88% height on wide windows', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(1920, 1080));
@@ -227,12 +227,20 @@ void main() {
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pumpAndSettle();
 
-      // The content column centers at max 840 logical pixels wide.
+      // The card centers at max 840 logical pixels wide and 88% of the
+      // overlay height: 950.4 tall with a 64.8 top margin.
+      const overlay = Size(1920, 1080);
+      final cardHeight = overlay.height * 0.88;
       expect(
         tester.getRect(find.byType(CockpitRecorderPanel)),
-        const Rect.fromLTWH(540, 0, 840, 1080),
+        Rect.fromLTWH(
+          (overlay.width - 840) / 2,
+          (overlay.height - cardHeight) / 2,
+          840,
+          cardHeight,
+        ),
       );
-      // The backdrop behind it still fills the whole window.
+      // The scrim behind it still fills the whole window.
       expect(
         tester.getRect(
           find.byKey(const ValueKey<String>('cockpit_recorder_fullscreen')),
@@ -310,10 +318,10 @@ void main() {
       );
 
       // The panel resolves the controller from the scope above the root
-      // Stack and renders its header and control row without a close
-      // button (nothing to collapse in an embedded host).
-      expect(find.text('no session'), findsOneWidget);
-      expect(find.text('Start'), findsOneWidget);
+      // Stack and renders its header and toolbar without a close button
+      // (nothing to collapse in an embedded host).
+      expect(find.text('Recorder'), findsOneWidget);
+      expect(find.text('Record'), findsOneWidget);
       expect(find.text('✕'), findsNothing);
     });
   });

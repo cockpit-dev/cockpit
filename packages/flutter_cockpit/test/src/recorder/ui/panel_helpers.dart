@@ -11,26 +11,36 @@ CockpitLocatorCandidate keyCandidate(String key) => CockpitLocatorCandidate(
   score: 4,
 );
 
+/// The shared capture clock steps build offsets against: the engine's
+/// wall-clock `recordedAt` is diagnostic, so tests pin one origin.
+DateTime sessionClock([Duration offset = Duration.zero]) {
+  return DateTime.utc(2026, 10, 7, 9).add(offset);
+}
+
 CockpitInteractionStep stepWithCandidates(
   CockpitInteractionStepKind kind, [
   List<CockpitLocatorCandidate> candidates = const <CockpitLocatorCandidate>[],
+  DateTime? recordedAt,
 ]) {
   return CockpitInteractionStep(
     stepId: 'pending',
     kind: kind,
     locatorCandidates: candidates,
     phase: CockpitRecorderPhase.recording,
-    recordedAt: DateTime.utc(2026, 10, 7, 9),
+    recordedAt: recordedAt ?? sessionClock(),
   );
 }
 
-CockpitInteractionStep unresolvedStep(CockpitInteractionStepKind kind) {
+CockpitInteractionStep unresolvedStep(
+  CockpitInteractionStepKind kind, {
+  DateTime? recordedAt,
+}) {
   return CockpitInteractionStep(
     stepId: 'pending',
     kind: kind,
     unresolved: true,
     phase: CockpitRecorderPhase.recording,
-    recordedAt: DateTime.utc(2026, 10, 7, 9),
+    recordedAt: recordedAt ?? sessionClock(),
   );
 }
 

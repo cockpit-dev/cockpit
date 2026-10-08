@@ -30,7 +30,7 @@ Offset cockpitRecorderSnapBallPosition(
 }
 
 /// Default recorder host: a draggable floating ball that expands into a
-/// full-screen panel over the app.
+/// centered card over a full-screen scrim.
 ///
 /// Mount topology (verified against `FlutterCockpitRootState.build`): the
 /// host mounts as a later `Stack` sibling *above* the capture-wrapped
@@ -53,7 +53,8 @@ final class CockpitRecorderHost extends StatefulWidget {
 
 final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
   static const Size _ballSize = Size(40, 40);
-  static const double _maxPanelWidth = 840;
+  static const double _maxCardWidth = 840;
+  static const double _maxCardHeightFactor = 0.88;
   static const Duration _snapAnimation = Duration(milliseconds: 200);
 
   /// Null until the first layout provides screen bounds; then the docked
@@ -124,7 +125,7 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                     ),
                   ),
                 ),
-                if (_expanded) _buildFullscreenPanel(),
+                if (_expanded) _buildExpandedCard(),
               ],
             ),
           );
@@ -149,9 +150,9 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: recording
-                      ? cockpitRecorderPanelDanger
+                      ? cockpitRecorderError
                       : const Color(0x00000000),
-                  width: 2,
+                  width: 1.5,
                 ),
               ),
             );
@@ -161,18 +162,24 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
     );
   }
 
-  /// The expanded panel: a full-screen overlay whose content column is
-  /// centered and capped at [_maxPanelWidth] on wide windows.
-  Widget _buildFullscreenPanel() {
+  /// The expanded state: a full-screen scrim with the recorder card
+  /// centered on it, capped at [_maxCardWidth] and 88% of the overlay
+  /// height so the app context stays visible around the card.
+  Widget _buildExpandedCard() {
     return Positioned.fill(
       key: const ValueKey<String>('cockpit_recorder_fullscreen'),
       child: Container(
-        color: cockpitRecorderPanelBackground,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _maxPanelWidth),
-            child: CockpitRecorderPanel(
-              onClose: () => setState(() => _expanded = false),
+        color: cockpitRecorderScrim,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: _maxCardWidth,
+                maxHeight: constraints.maxHeight * _maxCardHeightFactor,
+              ),
+              child: CockpitRecorderPanel(
+                onClose: () => setState(() => _expanded = false),
+              ),
             ),
           ),
         ),

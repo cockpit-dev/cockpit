@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit/src/recorder/ui/cockpit_recorder_panel_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'panel_helpers.dart';
@@ -27,9 +28,40 @@ void main() {
 
       expect(taps, 1);
     });
+
+    testWidgets('exposes a labeled button semantics node', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(child: CockpitRecorderEntryButton(onTap: () {})),
+        ),
+      );
+
+      expect(find.bySemanticsLabel('Cockpit recorder'), findsOneWidget);
+      handle.dispose();
+    });
   });
 
   group('CockpitRecorderIndicator', () {
+    test('maps every phase onto the shared token palette', () {
+      expect(
+        cockpitRecorderIndicatorColor(CockpitRecorderPhase.idle),
+        cockpitRecorderInkTertiary,
+      );
+      expect(
+        cockpitRecorderIndicatorColor(CockpitRecorderPhase.recording),
+        cockpitRecorderError,
+      );
+      expect(
+        cockpitRecorderIndicatorColor(CockpitRecorderPhase.paused),
+        cockpitRecorderWarning,
+      );
+      expect(
+        cockpitRecorderIndicatorColor(CockpitRecorderPhase.stopped),
+        cockpitRecorderAccent,
+      );
+    });
+
     testWidgets('reflects all four phases', (tester) async {
       final controller = newController();
       await tester.pumpWidget(

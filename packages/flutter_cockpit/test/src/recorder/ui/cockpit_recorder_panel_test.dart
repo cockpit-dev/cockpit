@@ -9,14 +9,17 @@ import 'panel_helpers.dart';
 
 void main() {
   group('header', () {
-    testWidgets('shows the phase badge and live counters', (tester) async {
+    testWidgets('shows the title, phase dot, and live counters', (
+      tester,
+    ) async {
       final controller = await pumpPanel(tester);
       controller.start();
       await tester.pump();
 
-      expect(find.text('COCKPIT RECORDER'), findsOneWidget);
-      expect(find.text('RECORDING'), findsOneWidget);
+      expect(find.text('Recorder'), findsOneWidget);
       expect(find.text('0 steps · 0 unresolved'), findsOneWidget);
+      // The phase is the header dot's color, not an uppercase word.
+      expect(find.text('RECORDING'), findsNothing);
 
       controller.recorder.recordInteractionStep(
         unresolvedStep(CockpitInteractionStepKind.tap),
@@ -26,31 +29,52 @@ void main() {
       expect(find.text('1 steps · 1 unresolved'), findsOneWidget);
     });
 
+    testWidgets('shows the session name once recording starts', (tester) async {
+      final controller = await pumpPanel(tester);
+
+      await tester.enterText(find.byType(EditableText), 'login flow');
+      await tester.tap(find.text('Record'));
+      await tester.pump();
+
+      expect(controller.phase, CockpitRecorderPhase.recording);
+      expect(find.textContaining('· login flow'), findsOneWidget);
+    });
+
+    testWidgets('idle shows neither counters nor a placeholder', (
+      tester,
+    ) async {
+      await pumpPanel(tester);
+
+      expect(find.text('no session'), findsNothing);
+      expect(find.textContaining('unresolved'), findsNothing);
+    });
+
     testWidgets('embedded panels render no close button', (tester) async {
       await pumpPanel(tester);
       expect(find.text('✕'), findsNothing);
     });
   });
 
-  group('control area', () {
+  group('toolbar', () {
     testWidgets('shows only the current phase primary buttons', (tester) async {
       final controller = await pumpPanel(tester);
 
-      // idle: start with the name field beside it.
-      expect(isButtonEnabled(tester, 'Start'), isTrue);
+      // idle: record with the name field beside it.
+      expect(isButtonEnabled(tester, 'Record'), isTrue);
+      expect(find.text('Session name (optional)'), findsOneWidget);
       expect(find.text('Pause'), findsNothing);
       expect(find.text('Resume'), findsNothing);
       expect(find.text('Stop'), findsNothing);
-      expect(find.text('no session'), findsOneWidget);
 
       controller.start();
       await tester.pump();
 
-      // recording: pause + stop.
-      expect(find.text('Start'), findsNothing);
+      // recording: pause + stop + the segment field.
+      expect(find.text('Record'), findsNothing);
       expect(isButtonEnabled(tester, 'Pause'), isTrue);
       expect(find.text('Resume'), findsNothing);
       expect(isButtonEnabled(tester, 'Stop'), isTrue);
+      expect(find.text('New segment label'), findsOneWidget);
 
       controller.pause();
       await tester.pump();
@@ -64,9 +88,14 @@ void main() {
       controller.stop();
       await tester.pump();
 
-      // stopped: start again.
-      expect(isButtonEnabled(tester, 'Start'), isTrue);
+      // stopped: record again, with a hint instead of the name field.
+      expect(isButtonEnabled(tester, 'Record'), isTrue);
       expect(find.text('Stop'), findsNothing);
+      expect(find.text('Session name (optional)'), findsNothing);
+      expect(
+        find.text('Session stopped — export below or record again.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('the name field feeds the session name', (tester) async {
@@ -91,11 +120,11 @@ void main() {
       expect(find.text('login flow'), findsNothing);
     });
 
-    testWidgets('tapping Start reads the name field', (tester) async {
+    testWidgets('tapping Record reads the name field', (tester) async {
       final controller = await pumpPanel(tester);
 
       await tester.enterText(find.byType(EditableText), 'checkout flow');
-      await tester.tap(find.text('Start'));
+      await tester.tap(find.text('Record'));
       await tester.pump();
       controller.recorder.recordInteractionStep(
         stepWithCandidates(
@@ -112,7 +141,7 @@ void main() {
       final controller = await pumpPanel(tester);
 
       await tester.enterText(find.byType(EditableText), '   ');
-      await tester.tap(find.text('Start'));
+      await tester.tap(find.text('Record'));
       await tester.pump();
 
       expect(controller.phase, CockpitRecorderPhase.recording);
@@ -123,8 +152,15 @@ void main() {
       controller.start();
       await tester.pump();
 
+      // The empty-label guard: Add segment stays disabled until text lands.
+      expect(isButtonEnabled(tester, 'Add segment'), isFalse);
+      expect(isButtonEnabled(tester, 'End segment'), isFalse);
+
       await tester.enterText(find.byType(EditableText), 'setup');
-      await tester.tap(find.text('Begin segment'));
+      await tester.pump();
+      expect(isButtonEnabled(tester, 'Add segment'), isTrue);
+
+      await tester.tap(find.text('Add segment'));
       await tester.pump();
 
       expect(controller.openSegments, <String>['setup']);
@@ -177,7 +213,7 @@ void main() {
   });
 
   group('timeline area', () {
-    testWidgets('renders locator summary and unresolved marker', (
+    testWidgets('renders action titles and the unresolved marker', (
       tester,
     ) async {
       final controller = await pumpPanel(tester);
@@ -194,12 +230,46 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const ValueKey<String>('s1')), findsOneWidget);
+      expect(find.text('Tap · save'), findsOneWidget);
       expect(find.text('@save'), findsOneWidget);
-      expect(find.text('(unresolved)'), findsOneWidget);
-      expect(find.text('No steps recorded yet.'), findsNothing);
+      expect(find.text('(unresolved target)'), findsOneWidget);
     });
 
-    testWidgets('delete appears on the last row only', (tester) async {
+    testWidgets('renders relative times from the first step', (tester) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      // The last row swaps its time for the Delete affordance while
+      // recording, so the timed offset lands on a middle row.
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(
+          CockpitInteractionStepKind.tap,
+          const <CockpitLocatorCandidate>[],
+          sessionClock(const Duration(milliseconds: 1200)),
+        ),
+      );
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      await tester.pump();
+
+      final firstRow = find.byKey(const ValueKey<String>('s1'));
+      final secondRow = find.byKey(const ValueKey<String>('s2'));
+      expect(
+        find.descendant(of: firstRow, matching: find.text('+0.0s')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: secondRow, matching: find.text('+1.2s')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('delete appears on the last row only, while recording', (
+      tester,
+    ) async {
       final controller = await pumpPanel(tester);
       controller.start();
       controller.recorder.recordInteractionStep(
@@ -212,18 +282,69 @@ void main() {
 
       final lastRow = find.byKey(const ValueKey<String>('s2'));
       final earlierRow = find.byKey(const ValueKey<String>('s1'));
-      expect(isRowButtonEnabled(tester, lastRow, 'Delete'), isTrue);
+      expect(isRowButtonEnabled(tester, lastRow, 'Delete step'), isTrue);
       expect(
-        find.descendant(of: earlierRow, matching: find.text('Delete')),
+        find.descendant(of: earlierRow, matching: find.text('Delete step')),
         findsNothing,
       );
 
+      // Pausing hides the affordance: no step can be discarded.
+      controller.pause();
+      await tester.pump();
+      expect(find.text('Delete step'), findsNothing);
+
+      controller.resume();
+      await tester.pump();
       await tester.tap(
-        find.descendant(of: lastRow, matching: find.text('Delete')),
+        find.descendant(of: lastRow, matching: find.text('Delete step')),
       );
       await tester.pump();
 
       expect(controller.steps.map((step) => step.stepId), <String>['s1']);
+    });
+
+    testWidgets('tapping a row expands the detail area', (tester) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap, <
+          CockpitLocatorCandidate
+        >[
+          keyCandidate('save'),
+          CockpitLocatorCandidate(kind: 'text', selector: 'New task', score: 2),
+        ]),
+      );
+      await tester.pump();
+
+      final row = find.byKey(const ValueKey<String>('s1'));
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: row, matching: find.text('key @save')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('text New task')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('4')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('2')),
+        findsOneWidget,
+      );
+
+      // Tapping the row again collapses it without saving.
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: row, matching: find.text('key @save')),
+        findsNothing,
+      );
+      expect(controller.steps.single.annotation, isNull);
     });
 
     testWidgets('annotate flow updates the row', (tester) async {
@@ -235,23 +356,21 @@ void main() {
       await tester.pump();
 
       final row = find.byKey(const ValueKey<String>('s1'));
-      await tester.tap(
-        find.descendant(of: row, matching: find.text('Annotate')),
-      );
-      await tester.pump();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
 
       await tester.enterText(
         find.descendant(of: row, matching: find.byType(EditableText)),
         'first tap',
       );
       await tester.tap(find.descendant(of: row, matching: find.text('Save')));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(controller.steps.single.annotation, 'first tap');
-      expect(find.text('note: first tap'), findsOneWidget);
+      expect(find.text('Note: first tap'), findsOneWidget);
     });
 
-    testWidgets('toggling annotate closed drops the inline editor', (
+    testWidgets('annotation Save stays disabled once not recording', (
       tester,
     ) async {
       final controller = await pumpPanel(tester);
@@ -259,29 +378,18 @@ void main() {
       controller.recorder.recordInteractionStep(
         stepWithCandidates(CockpitInteractionStepKind.tap),
       );
+      controller.stop();
       await tester.pump();
 
       final row = find.byKey(const ValueKey<String>('s1'));
-      final annotateButton = find.descendant(
-        of: row,
-        matching: find.text('Annotate'),
-      );
-      await tester.tap(annotateButton);
-      await tester.pump();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
       expect(
         find.descendant(of: row, matching: find.byType(EditableText)),
         findsOneWidget,
       );
-
-      // Tapping Annotate while open closes the editor without saving.
-      await tester.tap(annotateButton);
-      await tester.pump();
-
-      expect(
-        find.descendant(of: row, matching: find.byType(EditableText)),
-        findsNothing,
-      );
-      expect(controller.steps.single.annotation, isNull);
+      expect(isRowButtonEnabled(tester, row, 'Save'), isFalse);
     });
 
     testWidgets('rows show settle markers and open segments', (tester) async {
@@ -327,9 +435,10 @@ void main() {
       await tester.pump();
 
       // The lazy list only builds the newest row once scrolled to it.
-      expect(find.text('s12'), findsOneWidget);
-      expect(find.text('s12').hitTestable(), findsOneWidget);
-      expect(find.text('s1'), findsNothing);
+      final newest = find.byKey(const ValueKey<String>('s12'));
+      expect(newest, findsOneWidget);
+      expect(newest.hitTestable(), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('s1')), findsNothing);
     });
 
     testWidgets('follows a controller swap', (tester) async {
@@ -358,7 +467,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('s1'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('s1')), findsOneWidget);
 
       // Swapping controllers re-targets the timeline and its listener.
       await tester.pumpWidget(
@@ -400,7 +509,7 @@ void main() {
           kind: CockpitInteractionStepKind.text,
           resolvedValue: 'typed draft',
           phase: CockpitRecorderPhase.recording,
-          recordedAt: DateTime.utc(2026, 10, 7, 9),
+          recordedAt: sessionClock(),
         ),
       );
       controller.recorder.recordInteractionStep(
@@ -409,13 +518,25 @@ void main() {
           kind: CockpitInteractionStepKind.routeChange,
           routeName: '/checkout',
           phase: CockpitRecorderPhase.recording,
-          recordedAt: DateTime.utc(2026, 10, 7, 9),
+          recordedAt: sessionClock(),
         ),
       );
       await tester.pump();
 
-      expect(find.text('typed draft'), findsOneWidget);
-      expect(find.text('/checkout'), findsOneWidget);
+      expect(find.text('Type “typed draft”'), findsOneWidget);
+      expect(find.text('Open /checkout'), findsOneWidget);
+    });
+
+    testWidgets('shows the empty state before any step', (tester) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      await tester.pump();
+
+      expect(find.text('No steps yet'), findsOneWidget);
+      expect(
+        find.textContaining('appear here as they are captured'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -423,7 +544,9 @@ void main() {
     testWidgets('stays disabled until a session exists', (tester) async {
       final controller = await pumpPanel(tester);
 
-      expect(find.text('no bundle yet'), findsOneWidget);
+      // Nothing to report: the status line is hidden entirely.
+      expect(find.text('no bundle yet'), findsNothing);
+      expect(find.textContaining('case '), findsNothing);
       expect(isButtonEnabled(tester, 'Copy YAML'), isFalse);
       expect(isButtonEnabled(tester, 'Save'), isFalse);
       expect(isButtonEnabled(tester, 'Verify replay'), isFalse);
@@ -475,12 +598,16 @@ void main() {
       expect(clipboardText, controller.lastBundle!.caseYaml);
       expect(find.textContaining('case recorded-r1'), findsOneWidget);
       expect(find.textContaining('copied ✓'), findsOneWidget);
+      // The button itself flips to a success-colored confirmation.
+      expect(find.text('Copied'), findsOneWidget);
 
-      // The confirmation in the status line resets after two seconds.
+      // The confirmation resets after two seconds.
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('copied ✓'), findsOneWidget);
+      expect(find.text('Copied'), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('copied ✓'), findsNothing);
+      expect(find.text('Copy YAML'), findsOneWidget);
     });
 
     testWidgets('save exports and persists in one click', (tester) async {
@@ -538,7 +665,7 @@ void main() {
       expect(isButtonEnabled(tester, 'Verify replay'), isFalse);
     });
 
-    testWidgets('rows carry per-step badges with reasons', (tester) async {
+    testWidgets('rows carry per-step outcomes with reasons', (tester) async {
       final controller = await pumpPanel(
         tester,
         recorder: replayableRecorder(),
@@ -559,6 +686,9 @@ void main() {
       controller.recorder.recordInteractionStep(
         stepWithCandidates(CockpitInteractionStepKind.routeChange),
       );
+      // Stop first: the last row swaps its outcome for the Delete affordance
+      // while recording, and every outcome must be visible at once.
+      controller.stop();
       await tester.pump();
 
       expect(isButtonEnabled(tester, 'Verify replay'), isTrue);
@@ -566,16 +696,16 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // The badges live inside the timeline rows, joined by step id.
+      // The outcome words live inside the timeline rows, joined by step id.
       final s1Row = find.byKey(const ValueKey<String>('s1'));
       final s2Row = find.byKey(const ValueKey<String>('s2'));
       final s3Row = find.byKey(const ValueKey<String>('s3'));
       expect(
-        find.descendant(of: s1Row, matching: find.text('✓ passed')),
+        find.descendant(of: s1Row, matching: find.text('passed')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: s2Row, matching: find.text('✗ deviated')),
+        find.descendant(of: s2Row, matching: find.text('deviated')),
         findsOneWidget,
       );
       expect(
@@ -586,7 +716,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: s3Row, matching: find.text('– skipped')),
+        find.descendant(of: s3Row, matching: find.text('skipped')),
         findsOneWidget,
       );
       expect(
@@ -617,13 +747,14 @@ void main() {
 
 /// Whether the button showing [label] inside [row] is enabled.
 bool isRowButtonEnabled(WidgetTester tester, Finder row, String label) {
-  final gesture = find
-      .ancestor(of: find.text(label), matching: find.byType(GestureDetector))
-      .first;
+  final labelInRow = find.descendant(of: row, matching: find.text(label));
   expect(
-    find.descendant(of: row, matching: gesture),
+    labelInRow,
     findsOneWidget,
     reason: 'Button "$label" must live inside the row.',
   );
+  final gesture = find
+      .ancestor(of: labelInRow, matching: find.byType(GestureDetector))
+      .first;
   return tester.widget<GestureDetector>(gesture).onTap != null;
 }
