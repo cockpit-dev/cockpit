@@ -3,8 +3,9 @@ import 'package:flutter/widgets.dart';
 
 /// Shared visual vocabulary of the recorder HUD: an iOS floating-overlay
 /// palette — solid dark surfaces, a stopwatch-scale timer, filled
-/// thumb-sized controls — rebuilt from basic widgets only, so the panel
-/// depends on nothing beyond flutter/widgets.
+/// thumb-sized controls, squircle corners — rebuilt from framework layers
+/// only (widgets plus one painting border), so the panel depends on no
+/// Material or Cupertino library.
 ///
 /// Two rules hold the system together. Controls are Filled, never
 /// outlined: a hairline-bordered translucent pill reads as a wireframe
@@ -58,6 +59,55 @@ const double cockpitRecorderSheetRadius = 20;
 const double cockpitRecorderButtonRadius = 12;
 const double cockpitRecorderGlyphRadius = 9;
 const double cockpitRecorderChipRadius = 8;
+
+// --- Shapes ---
+
+/// Corners are squircles — continuous-curvature superellipses, the iOS
+/// app-icon family — rather than circular arcs.
+/// [RoundedSuperellipseBorder] ships in Flutter 3.32, exactly this
+/// package's declared minimum, and at these radii the difference is
+/// subtle but everywhere: the sheet reads as one poured surface instead
+/// of four arcs meeting straight edges.
+
+/// The expanded sheet's all-corner shape.
+const RoundedSuperellipseBorder cockpitRecorderSheetShape =
+    RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(cockpitRecorderSheetRadius),
+      ),
+    );
+
+/// The bottom sheet's top-only variant.
+const RoundedSuperellipseBorder cockpitRecorderSheetTopShape =
+    RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(cockpitRecorderSheetRadius),
+      ),
+    );
+
+/// Buttons, inputs, and the error banner share one control shape.
+const RoundedSuperellipseBorder cockpitRecorderControlShape =
+    RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(cockpitRecorderButtonRadius),
+      ),
+    );
+
+/// The step glyph tile's shape.
+const RoundedSuperellipseBorder cockpitRecorderGlyphShape =
+    RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(cockpitRecorderGlyphRadius),
+      ),
+    );
+
+/// The segment chip's shape.
+const RoundedSuperellipseBorder cockpitRecorderChipShape =
+    RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(cockpitRecorderChipRadius),
+      ),
+    );
 
 // --- Text styles (all platform-default fonts; nothing is monospaced) ---
 
@@ -188,11 +238,9 @@ final class _CockpitRecorderPanelButtonState
               height: widget.height,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               alignment: Alignment.center,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: _background(interactive),
-                borderRadius: BorderRadius.circular(
-                  cockpitRecorderButtonRadius,
-                ),
+                shape: cockpitRecorderControlShape,
               ),
               child: Text(
                 widget.label,
@@ -264,9 +312,9 @@ final class CockpitRecorderPanelChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: const ShapeDecoration(
         color: cockpitRecorderChipFill,
-        borderRadius: BorderRadius.circular(cockpitRecorderChipRadius),
+        shape: cockpitRecorderChipShape,
       ),
       child: Text(
         label,
@@ -327,8 +375,8 @@ final class _CockpitRecorderPanelCloseButtonState
 
 /// Single-line text field built on [EditableText] — the widgets-layer input
 /// widget, since the panel avoids Material composite widgets. 40 high,
-/// elevated fill; focus draws an accent ring at a constant border width so
-/// focusing never shifts the field's layout.
+/// elevated fill; focus draws an accent squircle ring at a constant side
+/// width so focusing never shifts the field's layout.
 ///
 /// The caller owns the [controller] (it reads the value when a button fires);
 /// the field owns its [FocusNode] and exposes [onSubmitted] for enter-driven
@@ -402,12 +450,13 @@ final class _CockpitRecorderPanelTextFieldState
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: cockpitRecorderSurfaceElevated,
-        borderRadius: BorderRadius.circular(cockpitRecorderButtonRadius),
-        border: Border.all(
-          width: 1.5,
-          color: focused ? cockpitRecorderAccent : const Color(0x00000000),
+        shape: cockpitRecorderControlShape.copyWith(
+          side: BorderSide(
+            width: 1.5,
+            color: focused ? cockpitRecorderAccent : const Color(0x00000000),
+          ),
         ),
       ),
       child: Stack(

@@ -189,9 +189,9 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
             if (bounds.width <= _sheetBreakpoint) {
               return Align(
                 alignment: AlignmentDirectional.bottomCenter,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(cockpitRecorderSheetRadius),
+                child: ClipPath(
+                  clipper: const ShapeBorderClipper(
+                    shape: cockpitRecorderSheetTopShape,
                   ),
                   child: ConstrainedBox(
                     key: const ValueKey<String>('cockpit_recorder_panel_frame'),
@@ -218,8 +218,10 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
               );
             }
             return Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(cockpitRecorderSheetRadius),
+              child: ClipPath(
+                clipper: const ShapeBorderClipper(
+                  shape: cockpitRecorderSheetShape,
+                ),
                 child: ConstrainedBox(
                   key: const ValueKey<String>('cockpit_recorder_panel_frame'),
                   constraints: const BoxConstraints(

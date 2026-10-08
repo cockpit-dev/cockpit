@@ -343,11 +343,9 @@ final class _ActionBarState extends State<_ActionBar> {
                   horizontal: 12,
                   vertical: 8,
                 ),
-                decoration: BoxDecoration(
+                decoration: const ShapeDecoration(
                   color: cockpitRecorderErrorBanner,
-                  borderRadius: BorderRadius.circular(
-                    cockpitRecorderButtonRadius,
-                  ),
+                  shape: cockpitRecorderControlShape,
                 ),
                 child: Row(
                   children: <Widget>[

@@ -28,9 +28,9 @@ final class CockpitRecorderStepGlyph extends StatelessWidget {
     return Container(
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
+      decoration: const ShapeDecoration(
         color: cockpitRecorderSurfaceElevated,
-        borderRadius: BorderRadius.circular(cockpitRecorderGlyphRadius),
+        shape: cockpitRecorderGlyphShape,
       ),
       child: Center(
         child: CustomPaint(

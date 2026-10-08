@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit/src/recorder/ui/cockpit_recorder_panel_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'panel_helpers.dart';
@@ -252,9 +253,18 @@ void main() {
       expect(rect.center.dy, 540.0);
       // The card form has no grab handle.
       expect(handle(), findsNothing);
+      // Clipped to the all-corner squircle, not a circular-arc round rect.
+      final clip = find
+          .ancestor(of: frame(), matching: find.byType(ClipPath))
+          .first;
+      expect(clip, findsOneWidget);
+      expect(
+        (tester.widget<ClipPath>(clip).clipper as ShapeBorderClipper).shape,
+        cockpitRecorderSheetShape,
+      );
       expect(
         find.ancestor(of: frame(), matching: find.byType(ClipRRect)),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.ancestor(of: frame(), matching: find.byType(BackdropFilter)),
@@ -287,12 +297,20 @@ void main() {
         expect(rect.bottom, 800.0);
         expect(rect.height, lessThan(576));
         expect(rect.height, greaterThan(250));
-        // The sheet form carries a 36x5 grab handle, centered at its top.
+        // The sheet form carries a 36x5 grab handle, centered at its top,
+        // clipped to the top-only squircle.
         expect(handle(), findsOneWidget);
         expect(tester.getSize(handle()), const Size(36, 5));
+        final clip = find
+            .ancestor(of: frame(), matching: find.byType(ClipPath))
+            .first;
+        expect(
+          (tester.widget<ClipPath>(clip).clipper as ShapeBorderClipper).shape,
+          cockpitRecorderSheetTopShape,
+        );
         expect(
           find.ancestor(of: frame(), matching: find.byType(ClipRRect)),
-          findsOneWidget,
+          findsNothing,
         );
       },
     );
