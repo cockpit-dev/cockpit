@@ -23,8 +23,8 @@ final class CockpitRecorderEntryButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 52,
-          height: 52,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: cockpitRecorderPanelBackground,
             shape: BoxShape.circle,
@@ -39,8 +39,8 @@ final class CockpitRecorderEntryButton extends StatelessWidget {
           ),
           child: const Center(
             child: SizedBox(
-              width: 16,
-              height: 16,
+              width: 12,
+              height: 12,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: cockpitRecorderPanelDanger,

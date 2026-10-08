@@ -1,14 +1,16 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/widgets.dart';
 
+import '../cockpit_replay_report.dart';
 import 'cockpit_recorder_controller.dart';
 import 'cockpit_recorder_panel_widgets.dart';
 
-/// Timeline area of the recorder panel: the live step list, newest last and
-/// auto-scrolled to the newest step, with per-row annotate and delete.
+/// Timeline hero of the recorder panel: the live step list, newest last and
+/// auto-scrolled to the newest step, with per-row annotate, replay outcome
+/// badges joined from the controller's last verify-replay pass, and delete.
 ///
 /// Delete is an engine constraint, not a UI preference: only the most
-/// recently recorded step can be discarded, so the button is enabled on the
+/// recently recorded step can be discarded, so the button appears on the
 /// last row alone while recording.
 final class CockpitRecorderTimeline extends StatefulWidget {
   /// Creates a timeline over the controller's current steps.
@@ -99,11 +101,17 @@ final class _CockpitRecorderTimelineState
             ),
           );
         }
+        final replayById = <String, CockpitReplayReport>{
+          for (final report
+              in widget.controller.replayReports ??
+                  const <CockpitReplayReport>[])
+            report.stepId: report,
+        };
         return ListView.separated(
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 2),
           itemCount: steps.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 4),
+          separatorBuilder: (_, _) => const SizedBox(height: 6),
           itemBuilder: (context, index) {
             final step = steps[index];
             return _CockpitRecorderTimelineRow(
@@ -115,6 +123,7 @@ final class _CockpitRecorderTimelineState
               canDelete: widget.controller.canDiscardLast,
               annotating: _annotatingStepId == step.stepId,
               noteController: _noteController,
+              replay: replayById[step.stepId],
               onAnnotate: () => _annotatingStepId == step.stepId
                   ? _closeAnnotation()
                   : _openAnnotation(step),
@@ -131,7 +140,7 @@ final class _CockpitRecorderTimelineState
   }
 }
 
-final class _CockpitRecorderTimelineRow extends StatelessWidget {
+class _CockpitRecorderTimelineRow extends StatelessWidget {
   const _CockpitRecorderTimelineRow({
     required this.step,
     required this.isLast,
@@ -139,6 +148,7 @@ final class _CockpitRecorderTimelineRow extends StatelessWidget {
     required this.canDelete,
     required this.annotating,
     required this.noteController,
+    required this.replay,
     required this.onAnnotate,
     required this.onSaveAnnotation,
     required this.onDelete,
@@ -151,6 +161,7 @@ final class _CockpitRecorderTimelineRow extends StatelessWidget {
   final bool canDelete;
   final bool annotating;
   final TextEditingController noteController;
+  final CockpitReplayReport? replay;
   final VoidCallback onAnnotate;
   final ValueChanged<String> onSaveAnnotation;
   final VoidCallback onDelete;
@@ -158,8 +169,11 @@ final class _CockpitRecorderTimelineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final annotation = step.annotation;
+    final replay = this.replay;
+    final reason = replay?.reason;
     return Container(
-      padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: cockpitRecorderPanelSurface.withAlpha(0x66),
         borderRadius: BorderRadius.circular(6),
@@ -172,46 +186,70 @@ final class _CockpitRecorderTimelineRow extends StatelessWidget {
             children: <Widget>[
               CockpitRecorderPanelChip(label: step.stepId),
               const SizedBox(width: 6),
-              CockpitRecorderPanelChip(label: step.kind.name),
-              const Spacer(),
-              if (step.settledAfterMs != null)
+              CockpitRecorderPanelChip(
+                label: step.kind.name,
+                color: cockpitRecorderStepKindColor(step.kind),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  step.unresolved
+                      ? '(unresolved)'
+                      : step.locatorCandidates.isEmpty
+                      ? step.resolvedValue ?? step.routeName ?? step.kind.name
+                      : step.locatorCandidates.first.selector,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: cockpitRecorderPanelTextStyle,
+                ),
+              ),
+              if (step.settledAfterMs != null) ...<Widget>[
+                const SizedBox(width: 6),
                 CockpitRecorderPanelChip(
                   label: 'settled ${step.settledAfterMs}ms',
                   color: cockpitRecorderPanelAccent,
                 ),
+              ],
+              if (replay != null) ...<Widget>[
+                const SizedBox(width: 6),
+                _replayBadge(replay),
+              ],
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            step.unresolved
-                ? '(unresolved)'
-                : step.locatorCandidates.isEmpty
-                ? step.resolvedValue ?? step.routeName ?? step.kind.name
-                : step.locatorCandidates.first.selector,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: cockpitRecorderPanelTextStyle,
-          ),
-          if (step.segments.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              children: <Widget>[
-                for (final segment in step.segments)
-                  CockpitRecorderPanelChip(label: segment),
-              ],
+          if (step.segments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 2,
+                children: <Widget>[
+                  for (final segment in step.segments)
+                    CockpitRecorderPanelChip(label: segment),
+                ],
+              ),
             ),
-          ],
-          if (annotation != null && !annotating) ...<Widget>[
-            const SizedBox(height: 4),
-            Text(
-              'note: $annotation',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: cockpitRecorderPanelCaptionStyle,
+          if (annotation != null && !annotating)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'note: $annotation',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: cockpitRecorderPanelCaptionStyle,
+              ),
             ),
-          ],
+          if (reason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                reason,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: cockpitRecorderPanelCaptionStyle.copyWith(
+                  color: _replayColor(replay!.status),
+                ),
+              ),
+            ),
           if (annotating)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -234,22 +272,43 @@ final class _CockpitRecorderTimelineRow extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 4),
-          Row(
-            children: <Widget>[
-              CockpitRecorderPanelButton(
-                label: 'Annotate',
-                onPressed: canMutate ? onAnnotate : null,
-              ),
-              const SizedBox(width: 6),
-              CockpitRecorderPanelButton(
-                label: isLast ? 'Delete' : 'Delete (last only)',
-                onPressed: isLast && canDelete ? onDelete : null,
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: <Widget>[
+                CockpitRecorderPanelButton(
+                  label: 'Annotate',
+                  onPressed: canMutate ? onAnnotate : null,
+                ),
+                if (isLast) ...<Widget>[
+                  const SizedBox(width: 6),
+                  CockpitRecorderPanelButton(
+                    label: 'Delete',
+                    onPressed: canDelete ? onDelete : null,
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+
+  Widget _replayBadge(CockpitReplayReport report) {
+    return CockpitRecorderPanelChip(
+      label: switch (report.status) {
+        CockpitReplayStatus.passed => '✓ passed',
+        CockpitReplayStatus.deviated => '✗ deviated',
+        CockpitReplayStatus.skipped => '– skipped',
+      },
+      color: _replayColor(report.status),
+    );
+  }
 }
+
+Color _replayColor(CockpitReplayStatus status) => switch (status) {
+  CockpitReplayStatus.passed => cockpitRecorderPanelSuccess,
+  CockpitReplayStatus.deviated => cockpitRecorderPanelDanger,
+  CockpitReplayStatus.skipped => cockpitRecorderPanelDimText,
+};

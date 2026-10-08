@@ -16,6 +16,12 @@ void main() {
         ),
       );
 
+      // The floating ball stays compact: 40x40 logical pixels.
+      expect(
+        tester.getSize(find.byType(CockpitRecorderEntryButton)),
+        const Size(40, 40),
+      );
+
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pump();
 

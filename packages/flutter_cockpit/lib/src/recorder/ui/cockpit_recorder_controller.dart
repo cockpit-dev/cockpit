@@ -101,8 +101,17 @@ final class CockpitRecorderController extends ChangeNotifier {
   // ([lastBundle], [replayReports], [savedPath]) keep the outcome of the
   // last run of their action until the next run replaces them.
 
-  /// Starts a new recording session.
-  void start() => _run(() => recorder.start());
+  /// Starts a new recording session, optionally named [name] (whitespace
+  /// trimmed; empty names start an unnamed session). The name surfaces as
+  /// the exported case document's `name`.
+  void start([String? name]) => _run(() {
+    final trimmed = name?.trim();
+    recorder.start(
+      trimmed == null || trimmed.isEmpty
+          ? null
+          : CockpitInteractionRecordingRequest(name: trimmed),
+    );
+  });
 
   /// Pauses the running session.
   void pause() => _run(() => recorder.pause());

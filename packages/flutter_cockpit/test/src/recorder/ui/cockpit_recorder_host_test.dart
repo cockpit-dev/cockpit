@@ -7,7 +7,7 @@ import 'panel_helpers.dart';
 void main() {
   group('cockpitRecorderSnapBallPosition', () {
     const Size bounds = Size(800, 600);
-    const Size ball = Size(52, 52);
+    const Size ball = Size(40, 40);
 
     test('docks to the nearer horizontal edge', () {
       expect(
@@ -16,7 +16,7 @@ void main() {
       );
       expect(
         cockpitRecorderSnapBallPosition(const Offset(500, 100), bounds, ball),
-        const Offset(748, 100),
+        const Offset(760, 100),
       );
     });
 
@@ -24,11 +24,11 @@ void main() {
       // The ball center sits exactly at the bounds middle: docksLeft is
       // strictly-less, so the tie resolves to the right edge.
       expect(
-        cockpitRecorderSnapBallPosition(const Offset(374, 100), bounds, ball),
-        const Offset(748, 100),
+        cockpitRecorderSnapBallPosition(const Offset(380, 100), bounds, ball),
+        const Offset(760, 100),
       );
       expect(
-        cockpitRecorderSnapBallPosition(const Offset(373.9, 100), bounds, ball),
+        cockpitRecorderSnapBallPosition(const Offset(379.9, 100), bounds, ball),
         const Offset(0, 100),
       );
     });
@@ -36,11 +36,11 @@ void main() {
     test('clamps vertically into bounds', () {
       expect(
         cockpitRecorderSnapBallPosition(const Offset(300, 700), bounds, ball),
-        const Offset(0, 548),
+        const Offset(0, 560),
       );
       expect(
         cockpitRecorderSnapBallPosition(const Offset(500, -20), bounds, ball),
-        const Offset(748, 0),
+        const Offset(760, 0),
       );
     });
 
@@ -48,7 +48,7 @@ void main() {
       expect(
         cockpitRecorderSnapBallPosition(
           const Offset(10, 10),
-          const Size(40, 40),
+          const Size(30, 30),
           ball,
         ),
         Offset.zero,
@@ -66,7 +66,7 @@ void main() {
   });
 
   group('host', () {
-    testWidgets('renders the collapsed ball and no sheet', (tester) async {
+    Future<void> pumpHost(WidgetTester tester) async {
       final controller = newController();
       await tester.pumpWidget(
         CockpitRecorderScope(
@@ -74,9 +74,25 @@ void main() {
           child: CockpitRecorderHost(controller: controller),
         ),
       );
+    }
+
+    testWidgets('renders the collapsed 40x40 ball and no panel', (
+      tester,
+    ) async {
+      await pumpHost(tester);
 
       expect(find.byType(CockpitRecorderEntryButton), findsOneWidget);
       expect(find.byType(CockpitRecorderPanel), findsNothing);
+      expect(
+        tester.getSize(
+          find.byKey(const ValueKey<String>('cockpit_recorder_ball')),
+        ),
+        const Size(40, 40),
+      );
+      expect(
+        tester.getSize(find.byType(CockpitRecorderEntryButton)),
+        const Size(40, 40),
+      );
       // The exclude marker wraps the host chrome (tier a, belt-and-braces:
       // the host also sits beside the capture subtree in the root stack).
       expect(
@@ -94,16 +110,10 @@ void main() {
     testWidgets('drag repositions the ball and docks it to the edge', (
       tester,
     ) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
       final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
       // Default test surface is 800x600: the ball starts docked right, 70% down.
-      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+      expect(tester.widget<AnimatedPositioned>(ball).left, 760.0);
       expect(tester.widget<AnimatedPositioned>(ball).top, 420.0);
 
       await tester.drag(ball, const Offset(-500, 0));
@@ -114,52 +124,34 @@ void main() {
     });
 
     testWidgets('drag keeps the ball within vertical bounds', (tester) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
       final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
 
       await tester.drag(ball, const Offset(0, 400));
       await tester.pumpAndSettle();
 
-      expect(tester.widget<AnimatedPositioned>(ball).top, 548.0);
-      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+      expect(tester.widget<AnimatedPositioned>(ball).top, 560.0);
+      expect(tester.widget<AnimatedPositioned>(ball).left, 760.0);
     });
 
     testWidgets('drag up docks at the top edge', (tester) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
       final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
 
       await tester.drag(ball, const Offset(0, -500));
       await tester.pumpAndSettle();
 
       expect(tester.widget<AnimatedPositioned>(ball).top, 0.0);
-      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+      expect(tester.widget<AnimatedPositioned>(ball).left, 760.0);
     });
 
     testWidgets('a small wiggle still taps; a real drag does not', (
       tester,
     ) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
       final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
-      final sheet = find.byKey(
-        const ValueKey<String>('cockpit_recorder_sheet'),
+      final fullscreen = find.byKey(
+        const ValueKey<String>('cockpit_recorder_fullscreen'),
       );
 
       // Below the touch slop the tap recognizer wins the arena.
@@ -170,13 +162,13 @@ void main() {
       await wiggle.up();
       await tester.pumpAndSettle();
 
-      expect(sheet, findsOneWidget);
+      expect(fullscreen, findsOneWidget);
 
       // Close, then drag well past the slop: the pan recognizer wins and
-      // the sheet stays closed.
-      await tester.tap(find.text('Close'));
+      // the panel stays closed.
+      await tester.tap(find.text('✕'));
       await tester.pumpAndSettle();
-      expect(sheet, findsNothing);
+      expect(fullscreen, findsNothing);
 
       final drag = await tester.startGesture(tester.getCenter(ball));
       await tester.pump();
@@ -185,21 +177,15 @@ void main() {
       await drag.up();
       await tester.pumpAndSettle();
 
-      expect(sheet, findsNothing);
+      expect(fullscreen, findsNothing);
       // The pan happened (still right of center, so it re-docked right).
-      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+      expect(tester.widget<AnimatedPositioned>(ball).left, 760.0);
     });
 
     testWidgets('the host subtree installs the exclusion marker object', (
       tester,
     ) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
 
       final marker = tester.renderObject<RenderObject>(
         find.byType(CockpitRecorderExclude),
@@ -207,35 +193,52 @@ void main() {
       expect(marker, isA<CockpitRecorderExcludeRenderObject>());
     });
 
-    testWidgets('tap expands the panel sheet and close collapses it', (
+    testWidgets('tap expands the full-screen panel and close collapses it', (
       tester,
     ) async {
-      final controller = newController();
-      await tester.pumpWidget(
-        CockpitRecorderScope(
-          controller: controller,
-          child: CockpitRecorderHost(controller: controller),
-        ),
-      );
+      await pumpHost(tester);
 
       await tester.tap(find.byType(CockpitRecorderEntryButton));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey<String>('cockpit_recorder_sheet')),
-        findsOneWidget,
+      final fullscreen = find.byKey(
+        const ValueKey<String>('cockpit_recorder_fullscreen'),
       );
+      expect(fullscreen, findsOneWidget);
+      // The overlay occupies the whole window — no partial card.
+      expect(tester.getRect(fullscreen), const Rect.fromLTWH(0, 0, 800, 600));
       expect(find.byType(CockpitRecorderPanel), findsOneWidget);
       expect(find.text('no session'), findsOneWidget);
 
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.text('✕'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey<String>('cockpit_recorder_sheet')),
-        findsNothing,
-      );
+      expect(fullscreen, findsNothing);
       expect(find.byType(CockpitRecorderPanel), findsNothing);
+    });
+
+    testWidgets('caps the panel width and centers it on ultra-wide windows', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pumpHost(tester);
+
+      await tester.tap(find.byType(CockpitRecorderEntryButton));
+      await tester.pumpAndSettle();
+
+      // The content column centers at max 840 logical pixels wide.
+      expect(
+        tester.getRect(find.byType(CockpitRecorderPanel)),
+        const Rect.fromLTWH(540, 0, 840, 1080),
+      );
+      // The backdrop behind it still fills the whole window.
+      expect(
+        tester.getRect(
+          find.byKey(const ValueKey<String>('cockpit_recorder_fullscreen')),
+        ),
+        const Rect.fromLTWH(0, 0, 1920, 1080),
+      );
     });
   });
 
@@ -307,9 +310,11 @@ void main() {
       );
 
       // The panel resolves the controller from the scope above the root
-      // Stack and renders its control area.
+      // Stack and renders its header and control row without a close
+      // button (nothing to collapse in an embedded host).
       expect(find.text('no session'), findsOneWidget);
       expect(find.text('Start'), findsOneWidget);
+      expect(find.text('✕'), findsNothing);
     });
   });
 }

@@ -1,3 +1,4 @@
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/widgets.dart';
 
 import '../cockpit_recorder_exclusion.dart';
@@ -29,7 +30,7 @@ Offset cockpitRecorderSnapBallPosition(
 }
 
 /// Default recorder host: a draggable floating ball that expands into a
-/// panel sheet with the full [CockpitRecorderPanel].
+/// full-screen panel over the app.
 ///
 /// Mount topology (verified against `FlutterCockpitRootState.build`): the
 /// host mounts as a later `Stack` sibling *above* the capture-wrapped
@@ -51,7 +52,8 @@ final class CockpitRecorderHost extends StatefulWidget {
 }
 
 final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
-  static const Size _ballSize = Size(52, 52);
+  static const Size _ballSize = Size(40, 40);
+  static const double _maxPanelWidth = 840;
   static const Duration _snapAnimation = Duration(milliseconds: 200);
 
   /// Null until the first layout provides screen bounds; then the docked
@@ -109,6 +111,7 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                         CockpitRecorderEntryButton(
                           onTap: () => setState(() => _expanded = !_expanded),
                         ),
+                        _buildRecordingRing(),
                         Positioned(
                           right: -2,
                           top: -2,
@@ -121,7 +124,7 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
                     ),
                   ),
                 ),
-                if (_expanded) _buildSheet(bounds),
+                if (_expanded) _buildFullscreenPanel(),
               ],
             ),
           );
@@ -130,48 +133,48 @@ final class _CockpitRecorderHostState extends State<CockpitRecorderHost> {
     );
   }
 
-  /// The expanded panel sheet: ~90% width, ~60% height, docked at the
-  /// bottom center of the screen.
-  Widget _buildSheet(Size bounds) {
-    final width = bounds.width * 0.9;
-    final height = bounds.height * 0.6;
-    return Positioned(
-      key: const ValueKey<String>('cockpit_recorder_sheet'),
-      left: (bounds.width - width) / 2,
-      bottom: 24,
-      width: width,
-      height: height,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cockpitRecorderPanelBackground,
-          border: Border.all(color: cockpitRecorderPanelBorder),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(color: Color(0x88000000), blurRadius: 16),
-          ],
-        ),
-        child: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
-              child: Row(
-                children: <Widget>[
-                  const Text(
-                    'COCKPIT RECORDER',
-                    style: cockpitRecorderPanelCaptionStyle,
-                  ),
-                  const SizedBox(width: 8),
-                  CockpitRecorderIndicator(controller: widget.controller),
-                  const Spacer(),
-                  CockpitRecorderPanelButton(
-                    label: 'Close',
-                    onPressed: () => setState(() => _expanded = false),
-                  ),
-                ],
+  /// Static ring tracing the ball while a session records — no animation,
+  /// which would keep frames scheduled and break `pumpAndSettle` in host
+  /// app tests.
+  Widget _buildRecordingRing() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            final recording =
+                widget.controller.phase == CockpitRecorderPhase.recording;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: recording
+                      ? cockpitRecorderPanelDanger
+                      : const Color(0x00000000),
+                  width: 2,
+                ),
               ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// The expanded panel: a full-screen overlay whose content column is
+  /// centered and capped at [_maxPanelWidth] on wide windows.
+  Widget _buildFullscreenPanel() {
+    return Positioned.fill(
+      key: const ValueKey<String>('cockpit_recorder_fullscreen'),
+      child: Container(
+        color: cockpitRecorderPanelBackground,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _maxPanelWidth),
+            child: CockpitRecorderPanel(
+              onClose: () => setState(() => _expanded = false),
             ),
-            const Expanded(child: CockpitRecorderPanel()),
-          ],
+          ),
         ),
       ),
     );

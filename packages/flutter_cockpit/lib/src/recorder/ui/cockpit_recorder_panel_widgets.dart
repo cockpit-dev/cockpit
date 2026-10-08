@@ -1,3 +1,4 @@
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -13,7 +14,23 @@ const Color cockpitRecorderPanelBorder = Color(0xFF2C3644);
 const Color cockpitRecorderPanelText = Color(0xFFE6EDF3);
 const Color cockpitRecorderPanelDimText = Color(0xFF93A1B3);
 const Color cockpitRecorderPanelAccent = Color(0xFF38BDF8);
+const Color cockpitRecorderPanelSuccess = Color(0xFF4ADE80);
 const Color cockpitRecorderPanelDanger = Color(0xFFF43F5E);
+
+/// The kind-to-color mapping timeline rows badge their steps with: gesture
+/// kinds get the cooler hues, navigation and passive kinds stay dim.
+Color cockpitRecorderStepKindColor(CockpitInteractionStepKind kind) {
+  return switch (kind) {
+    CockpitInteractionStepKind.tap => cockpitRecorderPanelAccent,
+    CockpitInteractionStepKind.longPress => const Color(0xFF818CF8),
+    CockpitInteractionStepKind.text => const Color(0xFF2DD4BF),
+    CockpitInteractionStepKind.scroll => const Color(0xFFFFC857),
+    CockpitInteractionStepKind.routeChange => const Color(0xFFA78BFA),
+    CockpitInteractionStepKind.back => cockpitRecorderPanelDimText,
+    CockpitInteractionStepKind.marker => const Color(0xFFFB923C),
+    CockpitInteractionStepKind.note => cockpitRecorderPanelDimText,
+  };
+}
 
 const TextStyle cockpitRecorderPanelTextStyle = TextStyle(
   color: cockpitRecorderPanelText,
