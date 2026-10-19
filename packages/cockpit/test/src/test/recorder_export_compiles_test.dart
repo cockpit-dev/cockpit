@@ -107,8 +107,10 @@ void main() {
     expect(compiledCase.testCase.id, 'recorded-r1');
     // Setup keeps the seeded tap plus its liveness wait on the next target.
     expect(compiledCase.testCase.setup, hasLength(2));
-    // Main steps: enterText, wait, scrollUntilVisible, wait, tap, route wait.
-    expect(compiledCase.testCase.steps, hasLength(6));
+    // Main steps: enterText, wait, scrollUntilVisible, tap, route wait. The
+    // scroll borrows the submit tap's locator and carries that wait itself,
+    // so no separate wait follows it.
+    expect(compiledCase.testCase.steps, hasLength(5));
     expect(
       compiledCase.testCase.steps.map((step) => step.stepId),
       everyElement(matches(RegExp(r'^st\d+$'))),
