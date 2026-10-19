@@ -14,6 +14,10 @@
   replay-verifiable.
 - Added `CockpitTestDocumentYamlWriter`, a write-only renderer that emits
   test-case documents as YAML without adding a dependency.
+- A folded scroll borrows the following step's locator and carries that wait
+  itself, so no redundant wait is injected between the scroll and the step it
+  reveals.
+- Fixed recorder export YAML quoting and recorded-flow bundle decoding.
 
 ## 4.11.1
 

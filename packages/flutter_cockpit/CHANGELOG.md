@@ -16,6 +16,16 @@
   can host the recorder.
 - Added in-app case export and the `/recorder/*` remote endpoints, enabling
   remote-driven recording from the CLI, Console, and MCP surfaces.
+- Rebuilt the recorder panel and floating host around the Console design
+  language: a compact ball expands into a full-screen panel with a stopwatch
+  hero, a live step counter, animated transitions, and squircle corners;
+  starting a recording collapses the overlay automatically.
+- Fixed replay of recorded flows with scroll preludes: a scroll that precedes
+  a tap borrows the tap's locator and carries that wait itself, so replay
+  scrolls toward the step it reveals without an injected wait in between.
+- Fixed replay of recorded flows across routes and large scroll offsets:
+  reveal searching now doubles its backtracking budget in the second
+  direction, so targets above the starting scroll position are found.
 
 ## 4.11.1
 

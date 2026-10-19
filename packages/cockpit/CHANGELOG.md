@@ -12,6 +12,17 @@
   live development target.
 - Added seven `recorder_*` MCP tools (disabled by default) so an agent can
   drive a recording session end to end and receive the exported case YAML.
+- Added `cockpit dev start --enable-interaction-recorder` to launch the
+  development app with the in-app interaction recorder enabled.
+- The `cockpit record` command group now proxies through supervisor worker
+  operations, so recording targets any development session without dialing
+  the app directly.
+- Hardened the recorder engine: exclusion tiers, ancestry depth limits, and
+  hook detachment are honored during capture and teardown; route capture and
+  replay survive concurrent navigation; bridges that cannot serve a session
+  fail with structured envelopes; exports create their parent directories.
+- Locked the borrowed-scroll export semantics and the recorder surface,
+  engine, and contract regressions behind tests.
 
 ## 4.11.1
 
