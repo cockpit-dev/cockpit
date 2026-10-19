@@ -245,44 +245,38 @@ void main() {
       expect(action.values[CockpitTestActionField.direction]!.value, 'up');
     });
 
-    test(
-      'scroll borrows the next action locator, not its grab point',
-      () {
-        final testCase = convert(<CockpitInteractionStep>[
-          _step(
-            's1',
-            CockpitInteractionStepKind.scroll,
-            direction: CockpitInteractionScrollDirection.up,
-            candidates: <CockpitLocatorCandidate>[
-              _candidate('key', const CockpitLocator(key: 'item-9'), 4),
-            ],
-          ),
-          _step(
-            's2',
-            CockpitInteractionStepKind.tap,
-            candidates: <CockpitLocatorCandidate>[
-              _candidate('key', const CockpitLocator(key: 'buy-now'), 4),
-            ],
-          ),
-        ]);
+    test('scroll borrows the next action locator, not its grab point', () {
+      final testCase = convert(<CockpitInteractionStep>[
+        _step(
+          's1',
+          CockpitInteractionStepKind.scroll,
+          direction: CockpitInteractionScrollDirection.up,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'item-9'), 4),
+          ],
+        ),
+        _step(
+          's2',
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[
+            _candidate('key', const CockpitLocator(key: 'buy-now'), 4),
+          ],
+        ),
+      ]);
 
-        // The scroll exists to bring the tap's target into view; targeting
-        // the grabbed item (already visible) would replay as a no-op.
-        // No wait is injected between the scroll and the tap: the scroll
-        // itself is the wait for that locator.
-        final actions = testCase.steps.map(_action).toList();
-        expect(actions, hasLength(3));
-        expect(actions[0].kind, CockpitTestActionKind.scrollUntilVisible);
-        expect(actions[0].locator!.testId!.value, 'buy-now');
-        expect(
-          actions[0].values[CockpitTestActionField.direction]!.value,
-          'up',
-        );
-        expect(actions[1].kind, CockpitTestActionKind.tap);
-        expect(actions[1].locator!.testId!.value, 'buy-now');
-        expect(actions[2].kind, CockpitTestActionKind.waitFor);
-      },
-    );
+      // The scroll exists to bring the tap's target into view; targeting
+      // the grabbed item (already visible) would replay as a no-op.
+      // No wait is injected between the scroll and the tap: the scroll
+      // itself is the wait for that locator.
+      final actions = testCase.steps.map(_action).toList();
+      expect(actions, hasLength(3));
+      expect(actions[0].kind, CockpitTestActionKind.scrollUntilVisible);
+      expect(actions[0].locator!.testId!.value, 'buy-now');
+      expect(actions[0].values[CockpitTestActionField.direction]!.value, 'up');
+      expect(actions[1].kind, CockpitTestActionKind.tap);
+      expect(actions[1].locator!.testId!.value, 'buy-now');
+      expect(actions[2].kind, CockpitTestActionKind.waitFor);
+    });
 
     test('an unresolved scroll survives when a target follows it', () {
       final testCase = convert(<CockpitInteractionStep>[
@@ -361,7 +355,12 @@ void main() {
 
       final actions = testCase.steps.map(_action).toList();
       expect(actions.first.kind, CockpitTestActionKind.tap);
-      expect(actions.where((action) => action.kind == CockpitTestActionKind.scrollUntilVisible), isEmpty);
+      expect(
+        actions.where(
+          (action) => action.kind == CockpitTestActionKind.scrollUntilVisible,
+        ),
+        isEmpty,
+      );
     });
 
     test('consecutive scrolls retarget at the same following target', () {

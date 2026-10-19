@@ -168,16 +168,14 @@ final class CockpitRecordedFlowConverter {
   /// another screen's target is meaningless. Borrowed locators share the
   /// lender's template instance, which [_weakAssertion] uses to skip the
   /// wait the scroll itself already guarantees.
-  List<_ExportableStep> _borrowScrollLocators(
-    List<_ExportableStep> entries,
-  ) {
+  List<_ExportableStep> _borrowScrollLocators(List<_ExportableStep> entries) {
     final upcomingLocator = <int, CockpitTestLocatorTemplate>{};
     CockpitTestLocatorTemplate? nextActionLocator;
     for (var index = entries.length - 1; index >= 0; index -= 1) {
       final entry = entries[index];
       switch (entry.step.kind) {
         case CockpitInteractionStepKind.routeChange ||
-              CockpitInteractionStepKind.back:
+            CockpitInteractionStepKind.back:
           nextActionLocator = null;
         case CockpitInteractionStepKind.scroll:
           if (nextActionLocator != null) {
