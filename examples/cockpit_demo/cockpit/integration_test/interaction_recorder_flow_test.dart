@@ -3,6 +3,7 @@ import 'package:cockpit_demo/src/app/todo_app_service.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/data/todo_repository.dart';
+import 'package:cockpit_demo/src/model/todo_filter.dart';
 import 'package:cockpit_demo/src/ui/widgets/task_list_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
@@ -33,6 +34,7 @@ void main() {
       expect(recorder.phase, CockpitRecorderPhase.idle);
 
       final repository = TodoRepository(database);
+
       await repository.createTask(title: 'Seed alpha');
       await repository.createTask(title: 'Seed bravo');
       for (var index = 3; index <= 12; index += 1) {
@@ -270,6 +272,28 @@ void main() {
       }
 
       // 10. Verify replay: actionable steps re-execute; capture stays silent.
+      // Replay re-runs the recorded gestures from the state the flow was
+      // captured in, so restore that precondition first: the recording has
+      // completed 'Seed alpha' — the detail screen's helper text depends on
+      // that completion state — and its setup segment already created the
+      // 'Recorded task' row the replay is about to create again.
+      final tasksAfterRecording = await repository.fetchTasks(
+        const TodoFilter(completionFilter: TodoCompletionFilter.all),
+      );
+      await repository.setTaskCompleted(
+        taskId: tasksAfterRecording
+            .firstWhere((task) => task.title == 'Seed alpha')
+            .id,
+        isCompleted: false,
+      );
+      await repository.deleteTask(
+        tasksAfterRecording
+            .firstWhere((task) => task.title == 'Recorded task')
+            .id,
+      );
+      await service.loadTasks();
+      await tester.pumpAndSettle();
+
       final stepsBeforeReplay = recorder.steps.length;
       final reports = await recorder.verifyReplay();
       await tester.pumpAndSettle();

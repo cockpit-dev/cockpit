@@ -35,6 +35,7 @@ import '../recorder/cockpit_interaction_recorder.dart';
 import '../recorder/ui/cockpit_recorder_controller.dart';
 import '../recorder/ui/cockpit_recorder_host.dart';
 import '../recorder/ui/cockpit_recorder_scope.dart';
+import 'cockpit_target_geometry_resolver.dart';
 import 'flutter_cockpit.dart';
 import 'flutter_cockpit_recorder_config.dart';
 import 'cockpit_derived_app_state.dart';
@@ -674,6 +675,22 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       if (_interactionRecorder == null) {
         _interactionRecorder = CockpitInteractionRecorder(
           registry: FlutterCockpit.binding.registry,
+          // Recorded route changes act as navigation sync points during
+          // replay: they need the live route to await the destination the
+          // flow documented.
+          routeNameProvider: () =>
+              FlutterCockpit.binding.currentRouteName.value,
+          // Reveal swipes replay from recorded press coordinates, so the
+          // internal gesture engine needs the live viewport to resolve
+          // that point into gesture geometry.
+          viewportGeometryProvider: () {
+            final surfaceContext = _surfaceKey.currentContext;
+            return surfaceContext is Element
+                ? CockpitTargetGeometryResolver.maybeFromViewport(
+                    surfaceContext,
+                  )
+                : null;
+          },
           // Replay settles through the root's idle wait (network-aware)
           // rather than the recorder's scheduler-only default. That wait is
           // a no-op under a Flutter test binding by design, so pump the

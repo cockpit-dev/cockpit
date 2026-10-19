@@ -1028,6 +1028,314 @@ void main() {
       },
     );
 
+    test(
+      'a tap whose target left the viewport is revealed by bounded scrolling',
+      () async {
+        final registry = CockpitTargetRegistry();
+        var swipes = 0;
+        Offset? swipeOrigin;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipes += 1;
+              swipeOrigin = action.origin;
+              if (swipes == 2) {
+                // The recorded row was visible while recording; at replay
+                // width it sits below the fold and only rejoins the tree
+                // once the list has scrolled.
+                registry.register(
+                  const CockpitTarget(
+                    registrationId: 'off-fold',
+                    keyValue: 'off-fold',
+                    routeName: '/',
+                  ),
+                );
+              }
+            }
+          },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('off-fold')],
+            positionDx: 160,
+            positionDy: 380,
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(swipes, 2);
+        expect(swipeOrigin, const Offset(160, 380));
+        expect(reports[0].status, CockpitReplayStatus.passed);
+      },
+    );
+
+    test('a reveal target above the starting position is reached after '
+        'backtracking', () async {
+      final registry = CockpitTargetRegistry();
+      var swipes = 0;
+      final directions = <AxisDirection>[];
+      final recorder = CockpitInteractionRecorder(
+        registry: registry,
+        waitForIdle:
+            ({
+              required Duration quietWindow,
+              required Duration timeout,
+            }) async => true,
+        gesturePerformer: (action) async {
+          if (action.type == CockpitGestureActionType.swipe) {
+            swipes += 1;
+            directions.add(action.direction);
+            if (swipes == 8) {
+              // The recorded row sits above the reveal's starting
+              // position: the first direction walks away from it, and it
+              // only rejoins the tree once the second direction has
+              // backtracked past where the reveal began.
+              registry.register(
+                const CockpitTarget(
+                  registrationId: 'off-top',
+                  keyValue: 'off-top',
+                  routeName: '/',
+                ),
+              );
+            }
+          }
+        },
+      );
+      recorder.start();
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[_keyCandidate('off-top')],
+          positionDx: 160,
+          positionDy: 380,
+        ),
+      );
+
+      final reports = await recorder.verifyReplay();
+
+      expect(swipes, 8);
+      expect(
+        directions,
+        orderedEquals(
+          List<AxisDirection>.filled(6, AxisDirection.up) +
+              List<AxisDirection>.filled(2, AxisDirection.down),
+        ),
+      );
+      expect(reports[0].status, CockpitReplayStatus.passed);
+    });
+
+    test(
+      'a reveal that finds nothing exhausts the doubled second direction',
+      () async {
+        final registry = CockpitTargetRegistry();
+        var swipes = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipes += 1;
+            }
+          },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('gone')],
+            positionDx: 160,
+            positionDy: 380,
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(swipes, 18);
+        expect(reports[0].status, CockpitReplayStatus.deviated);
+      },
+    );
+
+    test(
+      'a recorded route change waits for the live route to arrive',
+      () async {
+        final registry = CockpitTargetRegistry()
+          ..register(
+            const CockpitTarget(
+              registrationId: 'open',
+              keyValue: 'open',
+              routeName: '/inbox',
+            ),
+          );
+        var route = '/inbox';
+        var idleCalls = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          routeNameProvider: () => route,
+          gesturePerformer: (action) async {},
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async {
+                idleCalls += 1;
+                if (idleCalls == 3) {
+                  // The pop the first tap triggered lands a couple of
+                  // settle beats later, like real navigation does.
+                  route = '/editor';
+                  registry.register(
+                    const CockpitTarget(
+                      registrationId: 'compose',
+                      keyValue: 'compose',
+                      routeName: '/editor',
+                    ),
+                  );
+                }
+                return true;
+              },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('open')],
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.routeChange,
+            routeName: '/editor',
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('compose')],
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        // Two settle beats ran between the route change and the step after
+        // it — without the sync point the compose tap would resolve
+        // against the outgoing screen's registry state.
+        expect(idleCalls, 5);
+        expect(reports.map((report) => report.status), <CockpitReplayStatus>[
+          CockpitReplayStatus.passed,
+          CockpitReplayStatus.skipped,
+          CockpitReplayStatus.passed,
+        ]);
+      },
+    );
+
+    test(
+      'a route change that never arrives gives up within its budget',
+      () async {
+        var idleCalls = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: CockpitTargetRegistry()
+            ..register(
+              const CockpitTarget(
+                registrationId: 'open',
+                keyValue: 'open',
+                routeName: '/inbox',
+              ),
+            ),
+          routeNameProvider: () => '/inbox',
+          gesturePerformer: (action) async {},
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async {
+                idleCalls += 1;
+                return true;
+              },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('open')],
+          ),
+        );
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.routeChange,
+            routeName: '/editor',
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(reports[0].status, CockpitReplayStatus.passed);
+        // The route change stays non-actionable: 100 poll beats plus the
+        // per-step settles bound the wait.
+        expect(reports[1].status, CockpitReplayStatus.skipped);
+        expect(idleCalls, lessThanOrEqualTo(102));
+        expect(idleCalls, greaterThan(100));
+      },
+    );
+
+    test(
+      'a trailing scroll swipes toward its own grab-point candidate',
+      () async {
+        final registry = CockpitTargetRegistry();
+        var swipes = 0;
+        final recorder = CockpitInteractionRecorder(
+          registry: registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async => true,
+          gesturePerformer: (action) async {
+            if (action.type == CockpitGestureActionType.swipe) {
+              swipes += 1;
+              if (swipes == 2) {
+                // The row the finger grabbed sits below the fold at
+                // replay; the scroll exists to bring it back.
+                registry.register(
+                  const CockpitTarget(
+                    registrationId: 'filler-row',
+                    keyValue: 'filler-row',
+                    routeName: '/',
+                  ),
+                );
+              }
+            }
+          },
+        );
+        recorder.start();
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.scroll,
+            direction: CockpitInteractionScrollDirection.up,
+            candidates: <CockpitLocatorCandidate>[_keyCandidate('filler-row')],
+            positionDx: 120,
+            positionDy: 420,
+          ),
+        );
+
+        final reports = await recorder.verifyReplay();
+
+        expect(swipes, 2);
+        expect(reports.single.status, CockpitReplayStatus.passed);
+      },
+    );
+
     test('a route boundary stops the scroll target search', () async {
       final registry = CockpitTargetRegistry()
         ..register(

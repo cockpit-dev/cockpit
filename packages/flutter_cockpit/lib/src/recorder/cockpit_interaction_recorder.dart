@@ -49,18 +49,30 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   /// the defaults (no registry, scheduler-quiet idle wait, a
   /// [CockpitGestureEngine]) are sufficient everywhere except the registry,
   /// which the owner (the Cockpit root) must wire for replay to be legal.
+  /// [routeNameProvider] surfaces the live route during replay so recorded
+  /// route changes can act as navigation sync points, and
+  /// [viewportGeometryProvider] lets the internal gesture engine resolve
+  /// coordinate-only gestures — reveal swipes from a recorded press
+  /// position — against the live viewport.
   CockpitInteractionRecorder({
     DateTime Function()? now,
     CockpitTargetRegistry? registry,
     CockpitReplayIdleWaiter? waitForIdle,
     CockpitReplayGesturePerformer? gesturePerformer,
+    String? Function()? routeNameProvider,
+    CockpitViewportGeometryProvider? viewportGeometryProvider,
   }) : _now = now ?? DateTime.now,
        _registry = registry,
        _waitForIdle = waitForIdle,
-       _gesturePerformer = gesturePerformer;
+       _gesturePerformer = gesturePerformer,
+       _routeNameProvider = routeNameProvider,
+       _viewportGeometryProvider = viewportGeometryProvider;
 
   static const Duration _replayQuietWindow = Duration(milliseconds: 300);
   static const Duration _replaySettleTimeout = Duration(seconds: 5);
+
+  /// How often the route sync point polls the wired route provider.
+  static const Duration _routePollInterval = Duration(milliseconds: 50);
 
   /// Upper bound on goal-directed scroll swipes before a step reports
   /// deviation: each swipe travels roughly a viewport, so six covers about
@@ -72,6 +84,8 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   final CockpitTargetRegistry? _registry;
   final CockpitReplayIdleWaiter? _waitForIdle;
   final CockpitReplayGesturePerformer? _gesturePerformer;
+  final String? Function()? _routeNameProvider;
+  final CockpitViewportGeometryProvider? _viewportGeometryProvider;
   CockpitGestureEngine? _gestureEngine;
 
   /// Subtree exclusion registry the capture layer consults per event.
@@ -320,6 +334,19 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     CockpitInteractionStep? scrollToward,
   }) async {
     if (!isActionable(step)) {
+      // A recorded route change is not replayable itself — the action that
+      // caused it already replayed — but it is the flow's navigation sync
+      // point: the push or pop it documents is asynchronous, and without
+      // waiting for it the next step resolves against the outgoing screen
+      // on a slow device. Await the recorded destination, then settle so
+      // the incoming screen's targets join the registry before the flow
+      // continues.
+      if (step.routeName != null &&
+          (step.kind == CockpitInteractionStepKind.routeChange ||
+              step.kind == CockpitInteractionStepKind.back)) {
+        await _awaitRouteArrival(step.routeName!);
+        await _replaySettle();
+      }
       return CockpitReplayReport(
         stepId: step.stepId,
         kind: step.kind,
@@ -342,8 +369,28 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
           reason: 'Trailing scroll without a locator candidate.',
         );
       }
+      if (_resolveCandidate(step, registry) == null) {
+        // The scroll's own grab-point anchor sits off-screen at replay
+        // width, and nothing follows it to borrow a goal from: replay it
+        // goal-directed toward itself, the same fallback the exported
+        // case's `scrollUntilVisible` uses. A resolvable anchor keeps the
+        // direct dispatch below — one swipe on the target, exactly the
+        // gesture that was recorded.
+        return _replayScrollUntilVisible(step, registry, toward: step);
+      }
     }
-    final target = _resolveCandidate(step, registry);
+    var target = _resolveCandidate(step, registry);
+    if (target == null && step.kind != CockpitInteractionStepKind.scroll) {
+      // A target that was visible while recording can sit below the fold on
+      // replay: a narrower layout makes list rows taller and pushes the row
+      // out of the viewport before this step runs. Reveal it with the same
+      // bounded, goal-directed scrolling the recorded scroll steps replay
+      // with, then resolve again before deviating.
+      final revealed = await _revealForStep(step, registry);
+      if (revealed) {
+        target = _resolveCandidate(step, registry);
+      }
+    }
     if (target == null) {
       return CockpitReplayReport(
         stepId: step.stepId,
@@ -351,7 +398,8 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
         status: CockpitReplayStatus.deviated,
         reason:
             'No locator candidate resolved against the live registry '
-            '(tried ${step.locatorCandidates.map((c) => c.selector).join(', ')}).',
+            '(tried ${step.locatorCandidates.map((c) => c.selector).join(', ')}, '
+            'bounded scrolling did not reveal it).',
       );
     }
     try {
@@ -415,6 +463,58 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     );
   }
 
+  /// Reveals a step's target with bounded scrolling after its candidates
+  /// failed to resolve: the step was recorded against a target that was
+  /// visible then, so the same list — scrolled or re-laid-out at a different
+  /// width — usually still holds it one or two swipes away. Swipes start
+  /// from the recorded press position (inside the same scrollable) and try
+  /// each vertical direction in turn. The first direction gets
+  /// [_maxScrollReplayAttempts] swipes; the second gets twice that, because
+  /// it must first walk back over the first direction's ground before it can
+  /// explore past the starting position — otherwise it could only ever
+  /// return to where the reveal began, never beyond it.
+  Future<bool> _revealForStep(
+    CockpitInteractionStep step,
+    CockpitTargetRegistry registry,
+  ) async {
+    final origin = step.positionDx != null && step.positionDy != null
+        ? Offset(step.positionDx!, step.positionDy!)
+        : null;
+    const directions = <CockpitInteractionScrollDirection>[
+      CockpitInteractionScrollDirection.up,
+      CockpitInteractionScrollDirection.down,
+    ];
+    for (var phase = 0; phase < directions.length; phase += 1) {
+      final direction = directions[phase];
+      final attempts = phase == 0
+          ? _maxScrollReplayAttempts
+          : _maxScrollReplayAttempts * 2;
+      for (var attempt = 0; attempt < attempts; attempt += 1) {
+        if (_resolveCandidate(step, registry) != null) {
+          return true;
+        }
+        if (origin == null) {
+          return false;
+        }
+        try {
+          await _performGesture(
+            CockpitGestureAction.swipe(
+              origin: origin,
+              direction: _axisDirection(direction),
+            ),
+          );
+          await _replaySettle();
+        } on Object {
+          // A swipe off the live viewport (the recorded press position may
+          // not exist at this layout) is not a deviation of the step itself;
+          // stop revealing and let the resolution verdict speak.
+          return false;
+        }
+      }
+    }
+    return _resolveCandidate(step, registry) != null;
+  }
+
   /// One recorded-direction swipe: on the scroll's own resolved candidate
   /// when it has one, otherwise from the recorded grab position.
   Future<void> _scrollOnce(
@@ -441,6 +541,34 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
       quietWindow: _replayQuietWindow,
       timeout: _replaySettleTimeout,
     );
+  }
+
+  /// Bounded wait for the live route to reach [expected]. Navigation
+  /// triggered by a replayed action is asynchronous, and the recorded
+  /// route change that follows it is the only proof of when the new
+  /// screen is in place. Each poll runs one settle beat — the wired idle
+  /// wait pumps the frame queue under a test binding, which also advances
+  /// the test clock the beat needs — and the poll count bounds the whole
+  /// wait to the settle timeout's worth of beats. On exhaustion the
+  /// verdict is left to the next step's resolution instead of failing the
+  /// (non-replayable) route change itself.
+  Future<void> _awaitRouteArrival(String expected) async {
+    final provider = _routeNameProvider;
+    if (provider == null || provider() == expected) {
+      return;
+    }
+    final maxPolls =
+        _replaySettleTimeout.inMilliseconds ~/
+        _routePollInterval.inMilliseconds;
+    for (var poll = 0; poll < maxPolls; poll += 1) {
+      await (_waitForIdle ?? _defaultWaitForIdle)(
+        quietWindow: _routePollInterval,
+        timeout: _replaySettleTimeout,
+      );
+      if (provider() == expected) {
+        return;
+      }
+    }
   }
 
   /// Resolves the first candidate of [step] that the live registry can
@@ -508,8 +636,13 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   }
 
   Future<void> _performGesture(CockpitGestureAction action) {
-    return (_gesturePerformer ??
-        (_gestureEngine ??= CockpitGestureEngine()).perform)(action);
+    final performer = _gesturePerformer;
+    if (performer != null) {
+      return performer(action);
+    }
+    return (_gestureEngine ??= CockpitGestureEngine(
+      viewportGeometryProvider: _viewportGeometryProvider,
+    )).perform(action);
   }
 
   static Future<bool> _defaultWaitForIdle({
