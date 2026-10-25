@@ -1262,6 +1262,110 @@ void main() {
       expect(await healthStatus(), HttpStatus.ok);
     },
   );
+
+  test(
+    'waitForVmServiceUri resolves from app.debugPort and stays null when bounded',
+    () async {
+      final harness = _MachineHarness();
+      addTearDown(harness.dispose);
+
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle,
+        machineClient: harness.client,
+        remoteReachabilityProbe: (_) async => true,
+        settleTimeout: const Duration(seconds: 2),
+        settlePollInterval: const Duration(milliseconds: 10),
+      );
+      addTearDown(supervisor.dispose);
+
+      await supervisor.start();
+      expect(
+        await supervisor.waitForVmServiceUri(
+          timeout: const Duration(milliseconds: 10),
+        ),
+        isNull,
+      );
+
+      final waiting = supervisor.waitForVmServiceUri();
+      harness.stdoutController.add(
+        '[{"event":"app.debugPort","params":'
+        '{"wsUri":"ws://127.0.0.1:41097/late/ws"}}]',
+      );
+
+      expect(await waiting, Uri.parse('ws://127.0.0.1:41097/late/ws'));
+      expect(
+        (await supervisor.currentHandle()).vmServiceUri,
+        Uri.parse('ws://127.0.0.1:41097/late/ws'),
+      );
+    },
+  );
+
+  test('app.stop clears the VM service URI', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: harness.client,
+      remoteReachabilityProbe: (_) async => true,
+      settleTimeout: const Duration(seconds: 2),
+      settlePollInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    harness.stdoutController.add(
+      '[{"event":"app.start","params":{"appId":"app-1"}}]',
+    );
+    harness.stdoutController.add(
+      '[{"event":"app.debugPort","params":'
+      '{"wsUri":"ws://127.0.0.1:41098/stopped/ws"}}]',
+    );
+    expect(
+      await supervisor.waitForVmServiceUri(),
+      Uri.parse('ws://127.0.0.1:41098/stopped/ws'),
+    );
+
+    harness.stdoutController.add('[{"event":"app.stop","params":{}}]');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect((await supervisor.currentHandle()).vmServiceUri, isNull);
+  });
+
+  test('an explicit stop clears the VM service URI', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: harness.client,
+      remoteReachabilityProbe: (_) async => true,
+      settleTimeout: const Duration(seconds: 2),
+      settlePollInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    harness.stdoutController.add(
+      '[{"event":"app.start","params":{"appId":"app-1"}}]',
+    );
+    harness.stdoutController.add(
+      '[{"event":"app.debugPort","params":'
+      '{"wsUri":"ws://127.0.0.1:41099/explicit/ws"}}]',
+    );
+    expect(
+      await supervisor.waitForVmServiceUri(),
+      Uri.parse('ws://127.0.0.1:41099/explicit/ws'),
+    );
+
+    await supervisor.stop();
+
+    expect(
+      (await supervisor.currentStatus()).state,
+      CockpitDevelopmentSessionState.stopped,
+    );
+    expect((await supervisor.currentHandle()).vmServiceUri, isNull);
+  });
 }
 
 final class _MachineHarness {

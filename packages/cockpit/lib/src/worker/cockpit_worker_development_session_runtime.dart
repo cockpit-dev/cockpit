@@ -321,6 +321,10 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         CockpitDevelopmentSessionState.ready,
         timeout: _remaining(deadline),
       );
+      // `app.debugPort` normally precedes the settled-ready state, but the
+      // event can still be in flight; a bounded grace lets the launch receipt
+      // carry the debug-attach URI whenever the build exposes one.
+      await supervisor.waitForVmServiceUri();
       final snapshot = await _snapshot(supervisor);
       await _enableNetworkProfiling(snapshot.handle);
       _sessions[developmentSessionId] = supervisor;

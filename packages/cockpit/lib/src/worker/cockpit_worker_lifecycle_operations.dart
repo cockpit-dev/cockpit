@@ -713,7 +713,7 @@ final class CockpitWorkerLifecycleOperations {
       operation: () => _developmentRuntime.query(handle),
     );
     await _registry.updateDevelopmentSession(session.sessionId, result.handle);
-    return sanitizer.sanitize(
+    final sanitized = await sanitizer.sanitize(
       <String, Object?>{
         'sessionId': session.sessionId,
         'appId': session.appId,
@@ -726,6 +726,11 @@ final class CockpitWorkerLifecycleOperations {
       appId: session.appId,
       targetId: session.targetId,
     );
+    final runtime = sanitized['runtime'];
+    if (runtime is Map<String, Object?>) {
+      _exposeVmServiceUri(runtime, result.handle.vmServiceUri);
+    }
+    return sanitized;
   }
 
   Future<Map<String, Object?>> _reloadDevelopmentSession(
@@ -1039,15 +1044,25 @@ final class CockpitWorkerLifecycleOperations {
             ),
           ),
         ),
-        commit: (result) =>
-            _recordLaunchedApp(result.app, target.targetId, <String, Object?>{
+        commit: (result) async {
+          final recorded = await _recordLaunchedApp(
+            result.app,
+            target.targetId,
+            <String, Object?>{
               if (includeTarget)
                 'target': CockpitTargetHandle.fromAppHandle(
                   result.app,
                 ).toJson(),
               'app': result.app.toJson(),
               'status': result.status.toJson(),
-            }, sanitizer),
+            },
+            sanitizer,
+          );
+          // Same rationale as session.development.get: the launch receipt
+          // reports the freshly started application's debug-attach identity.
+          _exposeVmServiceUri(recorded, result.sessionHandle.vmServiceUri);
+          return recorded;
+        },
         rollback: (result) => _rollbackLaunchedApp(result.app),
       );
 
@@ -1302,8 +1317,22 @@ Map<String, Object?> _developmentRuntimeIdentity(
         'devicePort': remote.devicePort,
         'baseUrl': remote.baseUrl,
       },
+    if (handle.vmServiceUri != null)
+      'vmServiceUri': handle.vmServiceUri!.toString(),
     'vmServiceAvailable': handle.vmServiceUri != null,
     'launchedAt': handle.launchedAt.toUtc().toIso8601String(),
     'reloadGeneration': handle.reloadGeneration,
   };
+}
+
+/// Re-attaches the VM service URI after result sanitization.
+///
+/// The sanitizer's private-key filter strips `vmServiceUri` everywhere to
+/// keep accidental development-handle dumps out of operation results. The
+/// runtime identity is the sanctioned surface for that debug-attach URI —
+/// CLI `session show` and the console session monitor both consume it — so
+/// it is restored here, and only here.
+void _exposeVmServiceUri(Map<String, Object?> target, Uri? vmServiceUri) {
+  if (vmServiceUri == null) return;
+  target['vmServiceUri'] = vmServiceUri.toString();
 }

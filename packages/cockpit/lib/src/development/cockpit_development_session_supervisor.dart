@@ -98,6 +98,7 @@ final class CockpitDevelopmentSessionSupervisor {
   final Duration _reloadTimeout;
   CockpitDevelopmentSessionStatus _status;
   final Completer<void> _doneCompleter = Completer<void>();
+  Completer<Uri>? _vmServiceUriKnown;
   HttpServer? _server;
   CockpitWebRemoteSessionBridgeServer? _webBridgeServer;
   StreamSubscription<CockpitFlutterRunMachineEvent>? _eventSubscription;
@@ -149,6 +150,30 @@ final class CockpitDevelopmentSessionSupervisor {
   Future<CockpitDevelopmentSessionStatus> currentStatus() async => _status;
 
   Future<CockpitDevelopmentSessionHandle> currentHandle() async => _handle;
+
+  /// Waits until the running application's VM service URI is known.
+  ///
+  /// The URI arrives with the `app.debugPort` machine event, which normally
+  /// precedes the settled-ready state. Callers bound the wait so builds
+  /// without a VM service (profile or release) never block; `null` means the
+  /// URI is still unknown.
+  Future<Uri?> waitForVmServiceUri({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final known = _handle.vmServiceUri;
+    if (known != null) {
+      return known;
+    }
+    final completer = _vmServiceUriKnown ??= Completer<Uri>();
+    try {
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      // The bounded wait elapsed; the handle check below stays authoritative.
+    }
+    // The handle is the source of truth: the completer may hold a URI from
+    // an application instance that has since stopped.
+    return _handle.vmServiceUri;
+  }
 
   Future<void> get done => _doneCompleter.future;
 
@@ -376,6 +401,7 @@ final class CockpitDevelopmentSessionSupervisor {
         remoteSessionReachable: false,
       ),
     );
+    _handle = _handle.copyWith(vmServiceUri: null);
     if (closeControlPlane) {
       await _closeControlPlane();
     }
@@ -428,6 +454,7 @@ final class CockpitDevelopmentSessionSupervisor {
         if (wsUri != null) {
           final uri = Uri.parse(wsUri);
           _handle = _handle.copyWith(vmServiceUri: uri);
+          _completeVmServiceUri(uri);
           try {
             _vmServiceObserver?.call(uri);
           } on Object {
@@ -446,6 +473,9 @@ final class CockpitDevelopmentSessionSupervisor {
         if (_detachRequested) {
           break;
         }
+        // The application process is gone, so its VM service died with it;
+        // a stale URI must not survive as a debug-attach identity.
+        _handle = _handle.copyWith(vmServiceUri: null);
         if (!_explicitStopRequested &&
             _status.state == CockpitDevelopmentSessionState.starting &&
             _handle.remoteSessionHandle == null) {
@@ -775,8 +805,16 @@ final class CockpitDevelopmentSessionSupervisor {
     final currentVmServiceUri = client.currentVmServiceUri;
     if (currentVmServiceUri != null) {
       _handle = _handle.copyWith(vmServiceUri: currentVmServiceUri);
+      _completeVmServiceUri(currentVmServiceUri);
     }
     _eventSubscription = client.events.listen(_handleMachineEvent);
+  }
+
+  void _completeVmServiceUri(Uri uri) {
+    final completer = _vmServiceUriKnown;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(uri);
+    }
   }
 
   void _bindMachineAppId(String appId) {

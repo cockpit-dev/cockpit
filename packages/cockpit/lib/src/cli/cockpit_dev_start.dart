@@ -92,7 +92,7 @@ final class CockpitDevStartService {
             action: 'start',
             session: resolution.session,
             ok: true,
-            state: resolution.state,
+            state: cockpitStartStateWithVmServiceUri(resolution.state),
             changed: resolution.changed,
           );
         }
@@ -383,6 +383,7 @@ final class CockpitDevStartService {
         'projectPath': projectDirectory,
         'entrypoint': entrypoint,
         'recoverable': recoverable,
+        'vmServiceUri': ?output['vmServiceUri'] as String?,
       },
       changed: active == null ? 'launched' : 'relaunched',
     );
@@ -621,6 +622,22 @@ final class CockpitDevStartService {
     });
     return cockpitDataExitCode;
   }
+}
+
+/// Lifts the live VM service URI out of a development operation output so
+/// `dev start` reports the same debug-attach identity `session show` serves.
+Object? cockpitStartStateWithVmServiceUri(Object? state) {
+  if (state is! Map<Object?, Object?> || state.containsKey('vmServiceUri')) {
+    return state;
+  }
+  final runtime = state['runtime'];
+  final uri = runtime is Map<Object?, Object?> ? runtime['vmServiceUri'] : null;
+  if (uri is! String) return state;
+  return <String, Object?>{
+    for (final entry in state.entries)
+      if (entry.key is String) entry.key! as String: entry.value,
+    'vmServiceUri': uri,
+  };
 }
 
 String? cockpitDevStartFailureNext({

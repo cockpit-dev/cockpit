@@ -384,6 +384,65 @@ void main() {
     expect(value, isNot(contains('reachable')));
   });
 
+  test('session more exposes the runtime VM service URI', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'session.show',
+                data: const <String, Object?>{
+                  'handleId': '9',
+                  'lifecycle': 'ready',
+                  'ready': true,
+                  'live': <String, Object?>{
+                    'status': <String, Object?>{
+                      'state': 'ready',
+                      'appReachable': true,
+                      'remoteSessionReachable': true,
+                    },
+                    'runtime': <String, Object?>{
+                      'developmentSessionId': 'sqh0ejd3m77',
+                      'platform': 'macos',
+                      'vmServiceUri': 'ws://127.0.0.1:57573/attach=/ws',
+                      'vmServiceAvailable': true,
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    final runtime = value['runtime']! as Map<Object?, Object?>;
+    expect(runtime['vmServiceUri'], 'ws://127.0.0.1:57573/attach=/ws');
+  });
+
+  test('dev start brief reports the VM service URI', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.start',
+                data: const <String, Object?>{
+                  'ok': true,
+                  'action': 'start',
+                  'session': '9',
+                  'state': <String, Object?>{
+                    'lifecycle': 'ready',
+                    'platform': 'macos',
+                    'vmServiceUri': 'ws://127.0.0.1:57573/attach=/ws',
+                  },
+                  'changed': 'launched',
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['lifecycle'], 'ready');
+    expect(value['vmServiceUri'], 'ws://127.0.0.1:57573/attach=/ws');
+  });
+
   test('dev status brief preserves reconnecting app and bridge state', () {
     const renderer = CockpitCliOutputRenderer();
     final value =

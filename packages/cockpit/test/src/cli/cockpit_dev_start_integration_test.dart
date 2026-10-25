@@ -238,6 +238,26 @@ void main() {
       expect(harness.stub.serverHits, greaterThanOrEqualTo(1));
     },
   );
+
+  test(
+    'a launch receipt carrying a VM service URI reaches the start envelope',
+    () async {
+      harness.stub.launchVmServiceUri = 'ws://127.0.0.1:57573/launch=/ws';
+      final result = await harness.start(const CockpitDevStartRequest());
+
+      expect(result.exitCode, cockpitSuccessExitCode);
+      final state = result.envelope['state']! as Map<Object?, Object?>;
+      expect(state['vmServiceUri'], 'ws://127.0.0.1:57573/launch=/ws');
+    },
+  );
+
+  test('a launch receipt without a VM service URI omits the field', () async {
+    final result = await harness.start(const CockpitDevStartRequest());
+
+    expect(result.exitCode, cockpitSuccessExitCode);
+    final state = result.envelope['state']! as Map<Object?, Object?>;
+    expect(state, isNot(contains('vmServiceUri')));
+  });
 }
 
 final class _DevStartIntegrationHarness {
@@ -492,6 +512,7 @@ final class _StubSupervisorServer {
   final List<CockpitAutomationTargetResource> registeredTargets =
       <CockpitAutomationTargetResource>[];
   bool failLaunch = false;
+  String? launchVmServiceUri;
   int healthHits = 0;
   int serverHits = 0;
 
@@ -688,10 +709,11 @@ final class _StubSupervisorServer {
         return _operationResult(
           kind,
           workspaceId,
-          output: const <String, Object?>{
+          output: <String, Object?>{
             'sessionId': 'session-launched',
             'appId': 'app-launched',
             'targetId': targetId,
+            if (launchVmServiceUri != null) 'vmServiceUri': launchVmServiceUri,
           },
         );
       default:

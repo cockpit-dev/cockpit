@@ -1280,6 +1280,7 @@ Object? _compactDevState(
               'selected',
               'reused',
               'platform',
+              'vmServiceUri',
             ]),
   };
 }
@@ -2393,6 +2394,7 @@ Map<String, Object?> _compactDevelopmentOutput(
       'platform',
       'routeName',
       'reloadGeneration',
+      'vmServiceUri',
       'message',
     ]),
   };
