@@ -538,6 +538,21 @@ final class CockpitNativeTargetDiscovery {
         !_hasDuplicateControlSignal(left, right)) {
       return false;
     }
+    // Distinct keys prove distinct addressable controls — a card and the
+    // nested chip it carries may share text and commands, but both stay
+    // individually targetable. A pure Semantics wrapper is not its own
+    // control and still collapses into the standard control it describes.
+    final leftKey = left.keyValue;
+    final rightKey = right.keyValue;
+    if (leftKey != null &&
+        leftKey.isNotEmpty &&
+        rightKey != null &&
+        rightKey.isNotEmpty &&
+        leftKey != rightKey &&
+        left.typeName != 'Semantics' &&
+        right.typeName != 'Semantics') {
+      return false;
+    }
     final leftCommands = left.supportedCommands;
     final rightCommands = right.supportedCommands;
     if (!leftCommands.containsAll(rightCommands) &&
@@ -1181,6 +1196,12 @@ final class CockpitNativeTargetDiscovery {
                 actionableOwner.widget,
                 element.widget,
                 control,
+              ) &&
+              !_isIndependentCustomNestedControl(
+                actionableOwner,
+                element,
+                supportedCommands,
+                session,
               ))) {
         return null;
       }
@@ -1463,34 +1484,126 @@ final class CockpitNativeTargetDiscovery {
     if (!_controlOwnsSubtree(candidate, control)) {
       return false;
     }
+    return !_isFrameworkPlumbingPair(owner, candidate);
+  }
+
+  /// Known framework wrapper/inner pairs where the inner element implements
+  /// the outer control's own interaction.
+  bool _isFrameworkPlumbingPair(Widget owner, Widget candidate) {
     if ((owner is IconButton || owner is FloatingActionButton) &&
         candidate is ButtonStyleButton) {
-      return false;
+      return true;
     }
     if ((owner is TextField ||
             owner is TextFormField ||
             owner is CupertinoTextField ||
             owner is CupertinoSearchTextField) &&
         candidate is EditableText) {
-      return false;
+      return true;
     }
     if (owner is CupertinoSearchTextField && candidate is CupertinoTextField) {
-      return false;
+      return true;
     }
     if (owner is CheckboxListTile && candidate is Checkbox) {
-      return false;
+      return true;
     }
     if (owner is SwitchListTile && candidate is Switch) {
-      return false;
+      return true;
     }
     if (owner is RadioListTile && candidate is Radio) {
-      return false;
+      return true;
     }
     if (owner is DropdownButtonFormField<Object?> &&
         candidate is DropdownButton<Object?>) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Keeps custom interactive controls nested inside an actionable container.
+  ///
+  /// Framework plumbing — an InkWell, GestureDetector, or hover surface
+  /// spanning the parent's whole area — implements the parent's own
+  /// interaction and must stay hidden. A smaller region carrying its own
+  /// interaction plus one addressable signal (a trailing chip inside a
+  /// tappable card, a custom icon button inside a row) is a separate control
+  /// the caller can target directly, whatever widget types built it.
+  bool _isIndependentCustomNestedControl(
+    Element owner,
+    Element element,
+    Set<CockpitCommandType> supportedCommands,
+    _DiscoverySession session,
+  ) {
+    if (_isFrameworkPlumbingPair(owner.widget, element.widget)) {
       return false;
     }
-    return true;
+    if (!_hasOwnedInteraction(supportedCommands)) {
+      return false;
+    }
+    if (!_hasAddressableSignal(element, session)) {
+      return false;
+    }
+    // Generic gesture primitives without their own key are the owner's own
+    // implementation surface — an IconButton reaches its InkWell and inner
+    // GestureDetector — not separately authored controls.
+    final widget = element.widget;
+    final isGenericGesturePrimitive =
+        widget is GestureDetector ||
+        widget is InkResponse ||
+        widget is MouseRegion ||
+        widget is Listener;
+    if (isGenericGesturePrimitive && _keyValueForElement(element) == null) {
+      return false;
+    }
+    // A Cupertino segmented control owns every interaction inside a segment;
+    // its keyed gesture leaves route taps to onValueChanged, so they stay
+    // plumbing even when they carry their own key and callback.
+    final ownerSegment = _cupertinoSegmentControlAncestor(owner, session);
+    if (ownerSegment != null &&
+        identical(
+          ownerSegment,
+          _cupertinoSegmentControlAncestor(element, session),
+        )) {
+      return false;
+    }
+    // The same tap callback proves the inner surface forwards the owner's
+    // interaction rather than wiring its own.
+    final ownerTap = _tapHandlerForElement(owner, session);
+    final elementTap = _tapHandlerForElement(element, session);
+    if (ownerTap != null &&
+        elementTap != null &&
+        identical(ownerTap, elementTap)) {
+      return false;
+    }
+    return _occupiesDistinctNestedRegion(owner, element, session);
+  }
+
+  bool _hasAddressableSignal(Element element, _DiscoverySession session) {
+    return _keyValueForElement(element) != null ||
+        _semanticIdForElement(element, session) != null ||
+        _tooltipForElement(element, session) != null ||
+        _passiveTextForElement(element)?.isNotEmpty == true;
+  }
+
+  /// Whether [element] covers a strict sub-region of [owner], distinguishing
+  /// a genuinely nested control from plumbing that mirrors the owner's own
+  /// hit area.
+  bool _occupiesDistinctNestedRegion(
+    Element owner,
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final ownerBounds = _globalBoundsFor(owner, session);
+    final elementBounds = _globalBoundsFor(element, session);
+    if (ownerBounds == null || elementBounds == null) {
+      return false;
+    }
+    final ownerArea = ownerBounds.width * ownerBounds.height;
+    if (ownerArea <= 0) {
+      return false;
+    }
+    final elementArea = elementBounds.width * elementBounds.height;
+    return elementArea <= ownerArea * 0.85;
   }
 
   bool _controlAllowsCommand(

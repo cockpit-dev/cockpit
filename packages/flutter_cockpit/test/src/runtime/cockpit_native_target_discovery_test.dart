@@ -2365,6 +2365,115 @@ void main() {
       reason: 'The current overlay itself is not covered.',
     );
   });
+
+  testWidgets('retains custom nested controls inside actionable containers', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CockpitSurface(
+              key: rootKey,
+              routeName: '/board',
+              child: SizedBox(
+                width: 320,
+                height: 96,
+                child: GestureDetector(
+                  key: const ValueKey<String>('tappable-card'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      key: const ValueKey<String>('nested-chip'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {},
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Nested'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final registry = rootKey.currentState!.registry;
+    final card = registry
+        .resolve(const CockpitLocator(key: 'tappable-card'))
+        .target;
+    final chip = registry
+        .resolve(const CockpitLocator(key: 'nested-chip'))
+        .target;
+
+    expect(card, isNotNull);
+    expect(card!.supportedCommands, contains(CockpitCommandType.tap));
+    expect(
+      chip,
+      isNotNull,
+      reason: 'Custom nested controls must stay targetable.',
+    );
+    expect(chip!.supportedCommands, contains(CockpitCommandType.tap));
+  });
+
+  testWidgets(
+    'hides full-area plumbing wrappers inside actionable containers',
+    (tester) async {
+      final rootKey = GlobalKey<CockpitSurfaceState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: CockpitSurface(
+                key: rootKey,
+                routeName: '/board',
+                child: SizedBox(
+                  width: 320,
+                  height: 96,
+                  child: GestureDetector(
+                    key: const ValueKey<String>('tappable-card'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    child: const SizedBox.expand(
+                      child: ColoredBox(
+                        color: Color(0xFFEEEEEE),
+                        child: Center(child: Text('Card body')),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final registry = rootKey.currentState!.registry;
+      // Only the card and its passive text stay addressable; no wrapper row
+      // duplicating the card's own hit area appears.
+      expect(
+        registry.resolve(const CockpitLocator(text: 'Card body')).isSuccess,
+        isTrue,
+      );
+      expect(
+        registry.visibleTargets
+            .where(
+              (target) =>
+                  target.supportedCommands.contains(CockpitCommandType.tap),
+            )
+            .length,
+        1,
+      );
+    },
+  );
 }
 
 final class _CockpitTestFlowDelegate extends FlowDelegate {
