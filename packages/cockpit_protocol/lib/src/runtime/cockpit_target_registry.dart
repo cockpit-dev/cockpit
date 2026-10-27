@@ -529,6 +529,7 @@ final class CockpitTargetRegistry {
       scrollableTypeName: target.scrollableTypeName,
       routeName: target.routeName,
       visible: target.isVisible,
+      coveredByOverlay: target.coveredByOverlay,
       supportedCommands: target.supportedCommands.toList(growable: false),
       control: target.control,
     );

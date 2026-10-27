@@ -16,6 +16,7 @@ final class CockpitDiscoveryEngine {
     List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
     bool allowInactiveRouteFallback = false,
     bool includeClippedTargets = false,
+    bool includeCoveredRoutes = false,
   }) {
     return CockpitNativeTargetDiscovery(policy: policy).discover(
       rootContext: rootContext,
@@ -23,6 +24,7 @@ final class CockpitDiscoveryEngine {
       explicitTargets: explicitTargets,
       allowInactiveRouteFallback: allowInactiveRouteFallback,
       includeClippedTargets: includeClippedTargets,
+      includeCoveredRoutes: includeCoveredRoutes,
     );
   }
 

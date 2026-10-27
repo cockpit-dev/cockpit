@@ -695,6 +695,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   List<CockpitTarget> _discoverNativeTargets({
     bool includeClippedTargets = false,
+    bool includeCoveredRoutes = false,
   }) {
     final rootContext = _boundaryKey.currentContext;
     if (rootContext == null) {
@@ -706,6 +707,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       routeName: _registry.routeName,
       explicitTargets: _registry.registeredTargets,
       includeClippedTargets: includeClippedTargets,
+      includeCoveredRoutes: includeCoveredRoutes,
     );
     _syncRouteFromDiscoveredTargets(discovered);
     if (discovered.isNotEmpty ||
@@ -723,6 +725,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       explicitTargets: _registry.registeredTargets,
       allowInactiveRouteFallback: true,
       includeClippedTargets: includeClippedTargets,
+      includeCoveredRoutes: includeCoveredRoutes,
     );
     _syncRouteFromDiscoveredTargets(fallbackDiscovered);
     return fallbackDiscovered;

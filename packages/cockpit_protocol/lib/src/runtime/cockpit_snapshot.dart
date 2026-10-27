@@ -472,6 +472,7 @@ final class CockpitSnapshotTarget {
     this.scrollableTypeName,
     required this.routeName,
     this.visible = true,
+    this.coveredByOverlay = false,
     List<CockpitCommandType> supportedCommands = const <CockpitCommandType>[],
     this.control,
     this.layout,
@@ -499,6 +500,9 @@ final class CockpitSnapshotTarget {
   final String? scrollableTypeName;
   final String routeName;
   final bool visible;
+
+  /// Whether an inactive modal route (dialog, sheet, menu) covers this target.
+  final bool coveredByOverlay;
   final List<CockpitCommandType> supportedCommands;
   final CockpitControlState? control;
   final CockpitSnapshotLayout? layout;
@@ -535,6 +539,7 @@ final class CockpitSnapshotTarget {
     if (scrollableTypeName != null) 'scrollableTypeName': scrollableTypeName,
     'routeName': routeName,
     if (!visible) 'visible': false,
+    if (coveredByOverlay) 'coveredByOverlay': true,
     'supportedCommands': supportedCommands
         .map((command) => command.name)
         .toList(),
@@ -576,6 +581,7 @@ final class CockpitSnapshotTarget {
       scrollableTypeName: json['scrollableTypeName'] as String?,
       routeName: json['routeName']! as String,
       visible: json['visible'] as bool? ?? true,
+      coveredByOverlay: json['coveredByOverlay'] as bool? ?? false,
       supportedCommands: <CockpitCommandType>[
         for (var index = 0; index < rawCommands.length; index += 1)
           CockpitCommandType.fromJson(
@@ -639,6 +645,7 @@ final class CockpitSnapshotTarget {
             other.scrollableTypeName == scrollableTypeName &&
             other.routeName == routeName &&
             other.visible == visible &&
+            other.coveredByOverlay == coveredByOverlay &&
             other.control == control &&
             other.layout == layout &&
             other.content == content &&
@@ -670,6 +677,7 @@ final class CockpitSnapshotTarget {
     scrollableTypeName,
     routeName,
     visible,
+    coveredByOverlay,
     control,
     layout,
     content,

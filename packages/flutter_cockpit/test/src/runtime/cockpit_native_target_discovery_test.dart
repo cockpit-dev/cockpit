@@ -2291,6 +2291,80 @@ void main() {
       );
     },
   );
+
+  testWidgets('retains overlay-covered routes for surface snapshots', (
+    tester,
+  ) async {
+    final shellKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => KeyedSubtree(key: shellKey, child: child!),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                key: const ValueKey<String>('page-action'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Confirm'),
+                    actions: <Widget>[
+                      FilledButton(
+                        key: const ValueKey<String>('dialog-action'),
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Confirm'),
+                      ),
+                    ],
+                  ),
+                ),
+                child: const Text('Open dialog'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+
+    final rootContext = shellKey.currentContext!;
+    final engine = const CockpitDiscoveryEngine();
+
+    final actionTargets = engine.discover(
+      rootContext: rootContext,
+      routeName: '/',
+    );
+    expect(
+      actionTargets.any((target) => target.keyValue == 'dialog-action'),
+      isTrue,
+      reason: 'The current overlay stays actionable while it is open.',
+    );
+    expect(
+      actionTargets.any((target) => target.keyValue == 'page-action'),
+      isFalse,
+      reason: 'Covered page controls must stay invisible to actions.',
+    );
+
+    final surfaceTargets = engine.discover(
+      rootContext: rootContext,
+      routeName: '/',
+      includeCoveredRoutes: true,
+    );
+    final coveredPage = surfaceTargets.firstWhere(
+      (target) => target.keyValue == 'page-action',
+    );
+    expect(coveredPage.coveredByOverlay, isTrue);
+    expect(
+      surfaceTargets
+          .firstWhere((target) => target.keyValue == 'dialog-action')
+          .coveredByOverlay,
+      isFalse,
+      reason: 'The current overlay itself is not covered.',
+    );
+  });
 }
 
 final class _CockpitTestFlowDelegate extends FlowDelegate {

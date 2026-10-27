@@ -35,6 +35,7 @@ final class CockpitTarget {
     this.scrollableTypeName,
     required this.routeName,
     this.isVisible = true,
+    this.coveredByOverlay = false,
     this.supportedCommands = const <CockpitCommandType>{},
     this.control,
     this.locatorAncestors = const <CockpitSnapshotAncestor>[],
@@ -69,6 +70,13 @@ final class CockpitTarget {
   final String? scrollableTypeName;
   final String routeName;
   final bool isVisible;
+
+  /// Whether an inactive modal route (dialog, sheet, menu) covers this target.
+  ///
+  /// Covered targets stay discoverable for surface snapshots so callers can
+  /// see the page behind an overlay, while action resolution keeps ignoring
+  /// them until the overlay is gone.
+  final bool coveredByOverlay;
   final Set<CockpitCommandType> supportedCommands;
   final CockpitControlState? control;
   final List<CockpitSnapshotAncestor> locatorAncestors;
@@ -111,6 +119,7 @@ final class CockpitTarget {
       scrollableTypeName: scrollableTypeName,
       routeName: routeName,
       visible: isVisible,
+      coveredByOverlay: coveredByOverlay,
       supportedCommands: supportedCommands.toList(growable: false),
       control: control,
       ancestors: locatorAncestors,
@@ -135,6 +144,7 @@ final class CockpitTarget {
             other.scrollableTypeName == scrollableTypeName &&
             other.routeName == routeName &&
             other.isVisible == isVisible &&
+            other.coveredByOverlay == coveredByOverlay &&
             other.control == control &&
             other.diagnosticNodeProvider == diagnosticNodeProvider &&
             _commandSetEquality.equals(
@@ -159,6 +169,7 @@ final class CockpitTarget {
     scrollableTypeName,
     routeName,
     isVisible,
+    coveredByOverlay,
     control,
     diagnosticNodeProvider,
     _commandSetEquality.hash(supportedCommands),

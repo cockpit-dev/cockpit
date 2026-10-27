@@ -37,6 +37,7 @@ final class CockpitNativeTargetDiscovery {
     List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
     bool allowInactiveRouteFallback = false,
     bool includeClippedTargets = false,
+    bool includeCoveredRoutes = false,
   }) {
     final rootElement = rootContext as Element;
     final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
@@ -61,11 +62,16 @@ final class CockpitNativeTargetDiscovery {
       _InheritedDiscoveryScope scope,
     ) {
       final explicitTarget = explicitTargetsByElement[element];
+      // Routes covered by an overlay stay invisible to action resolution but
+      // remain discoverable for surface snapshots: the page behind a dialog is
+      // exactly the context callers need while deciding whether to dismiss it.
+      final coveredByOverlay = scope.routeScope?.isCurrent == false;
       if (!element.mounted ||
           policy.ignoresSubtree(element) ||
           scope.ancestorHidden ||
-          (!allowInactiveRouteFallback &&
-              scope.routeScope?.isCurrent == false) ||
+          (coveredByOverlay &&
+              !includeCoveredRoutes &&
+              !allowInactiveRouteFallback) ||
           _isControlTarget(explicitTarget)) {
         return;
       }
@@ -82,6 +88,7 @@ final class CockpitNativeTargetDiscovery {
       final targetRouteName = _effectiveDiscoveryRouteName(
         scope.routeScope,
         fallbackRouteName: routeName,
+        preserveUnnamedRoute: includeCoveredRoutes,
       );
       final candidate =
           explicitTarget == null &&
@@ -95,6 +102,7 @@ final class CockpitNativeTargetDiscovery {
               parent: parent,
               actionableOwner: actionableOwner,
               pointerBlocked: scope.pointerBlocked,
+              coveredByOverlay: coveredByOverlay,
               session: session,
             )
           : null;
@@ -1038,6 +1046,7 @@ final class CockpitNativeTargetDiscovery {
     required _DiscoverySession session,
     Element? parent,
     bool includeInferredInteraction = false,
+    bool coveredByOverlay = false,
   }) {
     final resolvedSemantics = cockpitResolveSemanticsTargetInfo(element);
     final semantics = resolvedSemantics?.inheritedFromAncestor == false
@@ -1212,6 +1221,7 @@ final class CockpitNativeTargetDiscovery {
         scrollableKeyValue: scrollableMetadata.keyValue,
         scrollableTypeName: scrollableMetadata.typeName,
         routeName: routeName ?? '',
+        coveredByOverlay: coveredByOverlay,
         supportedCommands: supportedCommands,
         control: control,
         locatorAncestors: _extractLocatorAncestors(
@@ -1305,6 +1315,7 @@ final class CockpitNativeTargetDiscovery {
       scrollableKeyValue: scrollableMetadata.keyValue,
       scrollableTypeName: scrollableMetadata.typeName,
       routeName: routeName ?? '',
+      coveredByOverlay: coveredByOverlay,
       locatorAncestors: _extractLocatorAncestors(
         element,
         routeName: routeName,
@@ -1336,6 +1347,7 @@ final class CockpitNativeTargetDiscovery {
       scrollableTypeName: target.scrollableTypeName,
       routeName: target.routeName,
       isVisible: isVisible,
+      coveredByOverlay: target.coveredByOverlay,
       supportedCommands: target.supportedCommands,
       control: target.control,
       locatorAncestors: target.locatorAncestors,
@@ -4120,13 +4132,19 @@ _CockpitRouteScope? _cockpitRouteScopeForWidget(Widget widget) {
 String? _effectiveDiscoveryRouteName(
   _CockpitRouteScope? routeScope, {
   required String? fallbackRouteName,
+  bool preserveUnnamedRoute = false,
 }) {
   if (routeScope == null) {
     return fallbackRouteName;
   }
   final routeName = routeScope.routeName;
   if (routeName == null || routeName.isEmpty) {
-    return routeScope.isCurrent ? fallbackRouteName : null;
+    if (routeScope.isCurrent) {
+      return fallbackRouteName;
+    }
+    // A covered unnamed route keeps the discovering surface's route identity
+    // so overlay-covered pages stay addressable by the page route name.
+    return preserveUnnamedRoute ? fallbackRouteName : null;
   }
   if (routeName == '/' &&
       routeScope.isCurrent &&
