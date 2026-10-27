@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.13.0
+
+- Added `coveredByOverlay` to targets and snapshot targets so surfaces can
+  report routes covered by dialogs, sheets, and menus while action
+  resolution keeps ignoring them.
+
 ## 4.12.0
 
 - Added the `cockpit.recording/v1` interaction recorder contracts: recording

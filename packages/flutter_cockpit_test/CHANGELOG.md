@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.13.0
+
+- Synchronized the Flutter test facade with the Cockpit 4.13.0 release.
+
 ## 4.12.0
 
 - Synchronized the Flutter test facade with the Cockpit 4.12.0 release.

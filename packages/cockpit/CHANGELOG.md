@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.13.0
+
+- Rebuilt `dev inspect` output as an operation map: passive text rows join
+  controls in visual order, offscreen rows are marked for `dev scroll`, and
+  rows behind an open dialog or sheet appear as covered context with bucket
+  counts.
+- Gave `dev inspect` its own CLI output budget so the mounted map is no
+  longer shrunk to a few rows by the generic brief-view byte limit.
+
 ## 4.12.0
 
 - Added remote-session client methods covering the interaction recorder

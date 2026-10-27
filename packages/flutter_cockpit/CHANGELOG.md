@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.13.0
+
+- Retained overlay-covered routes in surface discovery: the page behind a
+  dialog stays discoverable (marked covered) for orientation snapshots while
+  action resolution keeps ignoring it until the overlay is gone.
+- Included viewport-clipped targets in orientation snapshots (non-live
+  profiles) so offscreen controls stay addressable through `dev scroll`.
+- Fixed route naming when unnamed overlays (dialogs, bottom sheets, menus)
+  mount: the navigator resolves the nearest named route instead of resetting
+  the reported route to the launch route.
+- Fixed discovery route sync so an overlay-covered page can no longer steal
+  the current route through majority counting.
+- Kept custom nested controls targetable inside actionable containers when
+  they own their interaction, expose an addressable signal, and occupy a
+  distinct region; framework plumbing surfaces stay hidden.
+- Fixed duplicate-target preference so disabled public controls keep their
+  key and state instead of collapsing into internal hover surfaces.
+
 ## 4.12.0
 
 - Added the in-app interaction recorder: a capture layer listens to real
