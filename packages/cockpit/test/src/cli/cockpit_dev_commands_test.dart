@@ -1006,24 +1006,22 @@ void main() {
       },
     });
 
-    expect(result['count'], 3);
+    expect(result['count'], 6);
     final targets = (result['targets']! as List<Object?>)
         .cast<Map<String, Object?>>();
-    expect(targets.map((target) => target['label']), <Object?>[
+    expect(targets.map((target) => target['label'] ?? target['sel']), <Object?>[
+      'Overview',
       'Refresh',
       'Submit',
       'Sidebar',
+      'Ready',
+      '46',
     ]);
-    expect(targets.map((target) => target['can']), <Object?>[
-      'tap',
-      null,
-      'tap',
-    ]);
-    expect(targets[1]['state'], 'disabled');
-    expect(
-      targets.map((target) => target['sel']),
-      everyElement(matches(RegExp(r'^:[a-z0-9]{6,}$'))),
-    );
+    expect(targets[1]['can'], 'tap');
+    expect(targets[2]['state'], 'disabled');
+    expect(targets[1]['sel'].toString().startsWith(':'), isTrue);
+    // Passive text rows use durable selectors, not transient refs.
+    expect(targets[0]['sel'], '#heading');
   });
 
   test('dev target index includes a complete ordinary screen by default', () {
@@ -1077,7 +1075,7 @@ void main() {
     expect(result, isNot(contains('partial')));
   });
 
-  test('dev target index ignores omitted passive targets', () {
+  test('dev target index reports partial when the snapshot itself was cut', () {
     final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'summary': <String, Object?>{'visibleTargetCount': 200},
@@ -1102,8 +1100,11 @@ void main() {
       },
     });
 
-    expect(result['count'], 1);
-    expect(result, isNot(contains('partial')));
+    // The index now includes the passive heading, and the summary count
+    // proves the transport truncated the snapshot, so the projection says
+    // partial instead of silently claiming completeness.
+    expect(result['count'], 2);
+    expect(result['partial'], isTrue);
   });
 
   test('dev target index exposes every direct task action', () {

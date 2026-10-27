@@ -632,7 +632,7 @@ final class CockpitDevRuntime {
       'profile': 'locate',
       'snapshotOptions': CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.baseline,
-        maxTargets: hasQuery ? 10000 : 160,
+        maxTargets: hasQuery ? 10000 : 240,
         maxAncestorsPerTarget: 8,
         artifact: CockpitSnapshotArtifactMode.large,
       ).copyWith(query: normalizedQuery).toJson(),

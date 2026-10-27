@@ -130,28 +130,52 @@ Map<String, Object?> cockpitBuildUiTargetIndex(
       .map(_DevTarget.new)
       .where((target) => target.hasUsefulSignal)
       .toList(growable: false);
-  final targets = allTargets
+  final controls = allTargets
       .where((target) => target.isControl)
+      .toList(growable: false);
+  // Passive text rows give the surface its map: titles, labels, and content
+  // the caller reads to understand the screen. Text shadowed by an actionable
+  // control with the same label stays hidden to avoid duplicate rows.
+  final texts = allTargets
+      .where((target) => !target.isControl && _value(target.text) != null)
       .where((target) => !_isRedundantTextCandidate(target, allTargets))
       .toList(growable: false);
-  final ranked = List<_DevTarget>.of(targets)..sort(_compareForOverview);
-  final visible = ranked.take(limit).toList(growable: false);
-  final refs = _shortTargetRefs(targets);
+  // Visible rows describe the current screen; covered rows explain the page
+  // behind an overlay; offscreen rows mark what scrolling can still reach.
+  final visible = <_DevTarget>[
+    ...controls.where((target) => target.visible && !target.covered),
+    ...texts.where((target) => target.visible && !target.covered),
+  ]..sort(_compareForOverview);
+  final covered = <_DevTarget>[
+    ...controls.where((target) => target.covered),
+    ...texts.where((target) => target.covered),
+  ]..sort(_compareForOverview);
+  final offscreen = <_DevTarget>[
+    ...controls.where((target) => !target.visible && !target.covered),
+    ...texts.where((target) => !target.visible && !target.covered),
+  ]..sort(_compareForOverview);
+  final ranked = [...visible, ...covered, ...offscreen];
+  final shown = ranked.take(limit).toList(growable: false);
+  // Live refs resolve through the hittable registry, so only currently
+  // visible controls get one; covered and offscreen rows fall back to
+  // durable text/type selectors that `dev scroll` can still resolve.
+  final refs = _shortTargetRefs(visible.where((target) => target.isControl));
   final route =
       _value(snapshot.routeName) ??
-      visible.map((target) => _value(target.route)).nonNulls.firstOrNull;
+      shown.map((target) => _value(target.route)).nonNulls.firstOrNull;
   final targetCount = snapshot.summary?.visibleTargetCount;
   return <String, Object?>{
     'route': ?route,
-    'count': targets.length,
-    'targets': visible
-        .map((target) => target.overviewResult(targets, ref: refs[target]))
+    'count': ranked.length,
+    'targets': shown
+        .map((target) => target.overviewResult(ranked, ref: refs[target]))
         .toList(growable: false),
-    if (targets.length > visible.length)
-      'more': targets.length - visible.length,
+    if (ranked.length > shown.length) 'more': ranked.length - shown.length,
+    if (offscreen.isNotEmpty) 'offscreen': offscreen.length,
+    if (covered.isNotEmpty) 'covered': covered.length,
     if (targetCount != null &&
         targetCount > snapshot.visibleTargets.length &&
-        targets.length == snapshot.visibleTargets.length)
+        ranked.length == snapshot.visibleTargets.length)
       'partial': true,
   };
 }
@@ -186,6 +210,7 @@ final class _DevTarget {
       type = value.typeName,
       route = value.routeName,
       visible = value.visible,
+      covered = value.coveredByOverlay,
       path = value.path,
       scrollablePath = value.scrollablePath,
       commands = value.supportedCommands,
@@ -210,6 +235,7 @@ final class _DevTarget {
   final String? type;
   final String? route;
   final bool visible;
+  final bool covered;
   final String? path;
   final String? scrollablePath;
   final List<CockpitCommandType> commands;
@@ -231,6 +257,7 @@ final class _DevTarget {
     path: path,
     scrollablePath: scrollablePath,
     routeName: route ?? '',
+    coveredByOverlay: covered,
     supportedCommands: commands.toSet(),
     control: control,
     locatorAncestors: ancestors,
@@ -1033,7 +1060,7 @@ int _overviewRank(_DevTarget target) {
   return rank;
 }
 
-Map<_DevTarget, String> _shortTargetRefs(List<_DevTarget> targets) {
+Map<_DevTarget, String> _shortTargetRefs(Iterable<_DevTarget> targets) {
   final tokens = <_DevTarget, String>{
     for (final target in targets)
       target: cockpitTargetRefToken(target.registrationId),
@@ -1122,10 +1149,15 @@ String? _compactControlState(CockpitControlState? control) {
 
 String? _compactTargetState(_DevTarget target) {
   final controlState = _compactControlState(target.control);
-  if (target.visible) {
+  final placement = target.covered
+      ? 'covered'
+      : target.visible
+      ? null
+      : 'offscreen';
+  if (placement == null) {
     return controlState;
   }
-  return controlState == null ? 'offscreen' : 'offscreen|$controlState';
+  return controlState == null ? placement : '$placement|$controlState';
 }
 
 Object? _compactControlValue(Object? value) {
