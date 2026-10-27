@@ -384,6 +384,67 @@ void main() {
   });
 
   testWidgets(
+    'no-query orientation snapshots include offscreen mounted targets',
+    (tester) async {
+      final rootKey = GlobalKey<CockpitSurfaceState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 120,
+              child: CockpitSurface(
+                key: rootKey,
+                routeName: '/logs',
+                child: const SingleChildScrollView(
+                  child: Column(
+                    children: <Widget>[
+                      Text('Visible target'),
+                      SizedBox(height: 600),
+                      FilledButton(
+                        key: ValueKey<String>('offscreen-action'),
+                        onPressed: null,
+                        child: Text('Deep action'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final live = rootKey.currentState!.snapshot();
+      expect(
+        live.visibleTargets.any(
+          (target) => target.keyValue == 'offscreen-action',
+        ),
+        isFalse,
+        reason: 'Live action-result snapshots stay visible-only.',
+      );
+
+      final orientation = rootKey.currentState!.snapshot(
+        options: const CockpitSnapshotOptions(
+          profile: CockpitSnapshotProfile.baseline,
+          maxTargets: 50,
+        ),
+      );
+      final offscreen = orientation.visibleTargets.singleWhere(
+        (target) => target.keyValue == 'offscreen-action',
+      );
+      expect(offscreen.visible, isFalse);
+      expect(offscreen.coveredByOverlay, isFalse);
+      expect(
+        orientation.visibleTargets.any(
+          (target) => target.text == 'Visible target',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
     'FlutterCockpitRoot can attach network snapshots from an injected observer',
     (tester) async {
       final observer = _FakeNetworkObserver();
@@ -604,10 +665,16 @@ void main() {
         ),
         isTrue,
       );
+      // Orientation snapshots keep the covered page addressable for context,
+      // marked as covered, while action resolution must not reach it.
+      final coveredFab = snapshot.visibleTargets.singleWhere(
+        (target) => target.keyValue == 'fab-add-task',
+      );
+      expect(coveredFab.coveredByOverlay, isTrue);
       expect(
-        snapshot.visibleTargets.any(
-          (target) => target.keyValue == 'fab-add-task',
-        ),
+        FlutterCockpit.binding.registry
+            .resolve(const CockpitLocator(key: 'fab-add-task'))
+            .isSuccess,
         isFalse,
       );
     },

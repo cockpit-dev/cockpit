@@ -108,7 +108,16 @@ final class CockpitDiagnosticBuilder {
     final indexedTargets = _deduplicateTargets(
       visibleTargets,
     ).indexed.toList(growable: false);
+    // Visible rows outrank offscreen rows before salience applies: a bounded
+    // snapshot must describe the current screen first and treat scrollable
+    // overflow as supplementary context.
     indexedTargets.sort((left, right) {
+      final visibilityCompare = (right.$2.isVisible ? 1 : 0).compareTo(
+        left.$2.isVisible ? 1 : 0,
+      );
+      if (visibilityCompare != 0) {
+        return visibilityCompare;
+      }
       final salienceCompare = _salienceFor(
         right.$2,
       ).compareTo(_salienceFor(left.$2));

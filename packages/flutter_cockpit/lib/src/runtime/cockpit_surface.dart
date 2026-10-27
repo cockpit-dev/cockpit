@@ -340,6 +340,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (query != null && query.isNotEmpty) {
       visibleTargets = _mountedTargetsForQuery(query);
       diagnosticOptions = options.copyWith(clearQuery: true);
+    } else if (visibleTargets.isNotEmpty &&
+        options.profile != CockpitSnapshotProfile.live) {
+      // Orientation snapshots answer "what can I address here", so they see
+      // the whole mounted surface: viewport-clipped rows and overlay-covered
+      // routes included. Live snapshots stay visible-only for cheap action
+      // results, and action resolution keeps using the registry's targets.
+      visibleTargets = _mountedSurfaceTargets();
     }
     var snapshot = _diagnosticBuilder
         .build(
@@ -752,6 +759,26 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         .where((target) => _targetMatchesQuery(target, normalized))
         .toList(growable: false);
     return matches.isEmpty ? mountedRegistry.visibleTargets : matches;
+  }
+
+  /// Every mounted target for orientation snapshots, including rows clipped
+  /// out of the current viewport and routes covered by overlays.
+  ///
+  /// Offscreen targets stay reachable through `dev scroll` and covered rows
+  /// explain the page behind a dialog, so the surface view deliberately sees
+  /// more than the hittable set action resolution uses.
+  List<CockpitTarget> _mountedSurfaceTargets() {
+    final discovered = _discoverNativeTargets(
+      includeClippedTargets: true,
+      includeCoveredRoutes: true,
+    );
+    final mountedRegistry = CockpitTargetRegistry(
+      routeName: _registry.routeName,
+    )..discoveredTargetsProvider = () => discovered;
+    for (final target in _registry.registeredTargets) {
+      mountedRegistry.register(target);
+    }
+    return mountedRegistry.allTargets;
   }
 
   bool _targetMatchesQuery(CockpitTarget target, String query) => <String?>[

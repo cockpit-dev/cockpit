@@ -740,6 +740,17 @@ final class CockpitNativeTargetDiscovery {
     CockpitTarget existing,
     CockpitTarget candidate,
   ) {
+    // A public control — one carrying control state or a stable key — outranks
+    // both action-bearing plumbing and peer wrappers: a disabled
+    // FilledButton must keep its identity instead of collapsing into the
+    // button's internal MouseRegion hover surface.
+    final existingIsPublic =
+        existing.control != null || _hasStableKey(existing);
+    final candidateIsPublic =
+        candidate.control != null || _hasStableKey(candidate);
+    if (existingIsPublic != candidateIsPublic) {
+      return existingIsPublic ? existing : candidate;
+    }
     final existingIsActionable = existing.supportedCommands.isNotEmpty;
     final candidateIsActionable = candidate.supportedCommands.isNotEmpty;
     if (existingIsActionable != candidateIsActionable) {
