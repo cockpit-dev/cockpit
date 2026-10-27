@@ -799,6 +799,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
     final routeCounts = <String, int>{};
     for (final target in targets) {
+      // Overlay-covered routes never own the current route: a covered page
+      // often carries more targets than the overlay above it, so counting
+      // it would rewrite the route back to the page below.
+      if (target.coveredByOverlay) {
+        continue;
+      }
       final routeName = target.routeName.trim();
       if (routeName.isEmpty || routeName == '/') {
         continue;
