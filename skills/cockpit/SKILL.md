@@ -705,20 +705,29 @@ and action fallback. Icon-only controls expose readable tooltips. Lazy lists exp
 only mounted rows; pass an off-screen target directly to `dev scroll`, which owns
 mounting and reveal.
 
-With no query, `dev inspect` returns the current mounted control surface in
-visual order, normally the whole screen in one bounded response. Read each
-`targets` row as `sel`, optional `label`, executable `can`, optional `state`, and
-optional `value`. State can report `disabled`, `selected|unselected`,
-`on|off|mixed`, `focused`, `readonly`, or `obscured`; obscured inputs never expose
-their value. A `sel` beginning with `:` is an opaque live ref for this mounted UI;
-copy it directly into the command named by `can` without another inspect. Live
-refs are deliberately transient: re-inspect after navigation, overlay, filtering,
-reorder, keyboard, or other control-surface changes. Never store them in a case or
-suite. A disabled target intentionally has no executable action. Use these rows
-directly instead of querying every control or loading a tree merely to discover
-actions. A targeted `dev inspect QUERY` still searches passive content and returns
-a stable selector for durable reuse when text or structure, rather than the whole
-control surface, is the question.
+With no query, `dev inspect` returns the mounted control surface as an
+operation map: every addressable row in visual order, plus what sits beyond
+the current viewport or under an overlay. Read each `targets` row as `sel`,
+optional `label`, executable `can`, optional `state`, and optional `value`.
+Text rows (titles, labels, content) carry no `can` and exist for context and
+durable text selectors. State can report `disabled`, `selected|unselected`,
+`on|off|mixed`, `focused`, `readonly`, or `obscured`; obscured inputs never
+expose their value. Rows marked `offscreen` are mounted outside the viewport:
+pass their `sel` directly to `dev scroll`, which owns reveal. Rows marked
+`covered` sit behind an open dialog, sheet, or menu: they describe the page
+that returns after the overlay is dismissed and stay non-actionable until
+then, so act on the overlay's own rows or `dev dismiss` first. The response
+reports `offscreen` and `covered` counts when those buckets are non-empty. A
+`sel` beginning with `:` is an opaque live ref for this mounted UI; only
+currently visible rows carry one. Copy it directly into the command named by
+`can` without another inspect. Live refs are deliberately transient:
+re-inspect after navigation, overlay, filtering, reorder, keyboard, or other
+control-surface changes. Never store them in a case or suite. A disabled
+target intentionally has no executable action. Use these rows directly
+instead of querying every control or loading a tree merely to discover
+actions. A targeted `dev inspect QUERY` still searches passive content and
+returns a stable selector for durable reuse when text or structure, rather
+than the whole control surface, is the question.
 
 Interaction ownership stays explicit: merged ancestor `Semantics` never makes
 passive descendants actionable, and descendants below `IgnorePointer(ignoring:
