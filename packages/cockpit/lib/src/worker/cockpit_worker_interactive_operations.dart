@@ -26,6 +26,7 @@ import '../application/cockpit_session_registry.dart';
 import '../application/cockpit_start_recording_service.dart';
 import '../application/cockpit_stop_recording_service.dart';
 import '../application/cockpit_wait_idle_service.dart';
+import '../development/cockpit_app_pause_guard.dart';
 import '../development/cockpit_development_session_status.dart';
 import '../development/cockpit_vm_network_profiler.dart';
 import '../platform/ios/cockpit_ios_device_connection.dart';
@@ -56,6 +57,7 @@ final class CockpitWorkerInteractiveOperations {
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerProcessManager processManager,
     CockpitInteractiveSnapshotStore? snapshotStore,
+    CockpitAppPauseGuard? appPauseGuard,
     CockpitInspectUiService? inspectUiService,
     CockpitInspectSurfaceService? inspectSurfaceService,
     CockpitReadLogsService? readLogsService,
@@ -111,11 +113,13 @@ final class CockpitWorkerInteractiveOperations {
         );
     final effectiveNetworkProfiler =
         networkProfiler ?? CockpitVmNetworkProfiler();
+    final pauseGuard = appPauseGuard ?? CockpitVmAppPauseGuard();
     return CockpitWorkerInteractiveOperations._(
       workspaceId: workspaceId,
       workspaceRoot: workspaceRoot,
       registry: registry,
       developmentRuntime: developmentRuntime,
+      appPauseGuard: pauseGuard,
       systemActionParameters: CockpitWorkerSystemActionParameters(
         producerRoot: producerRoot,
         documents: documents,
@@ -180,6 +184,7 @@ final class CockpitWorkerInteractiveOperations {
     required this.workspaceRoot,
     required CockpitWorkerRuntimeRegistry registry,
     required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
+    required CockpitAppPauseGuard appPauseGuard,
     required CockpitWorkerSystemActionParameters systemActionParameters,
     required CockpitWorkerTargetResolver targets,
     required CockpitInspectUiService inspectUiService,
@@ -202,6 +207,7 @@ final class CockpitWorkerInteractiveOperations {
     required CockpitInteractionRecorderAppService interactionRecorderService,
   }) : _registry = registry,
        _developmentRuntime = developmentRuntime,
+       _appPauseGuard = appPauseGuard,
        _systemActionParameters = systemActionParameters,
        _targets = targets,
        _inspectUi = inspectUiService,
@@ -255,6 +261,7 @@ final class CockpitWorkerInteractiveOperations {
   final String workspaceRoot;
   final CockpitWorkerRuntimeRegistry _registry;
   final CockpitWorkerDevelopmentSessionRuntime _developmentRuntime;
+  final CockpitAppPauseGuard _appPauseGuard;
   final CockpitWorkerSystemActionParameters _systemActionParameters;
   final CockpitWorkerTargetResolver _targets;
   final CockpitInspectUiService _inspectUi;
@@ -362,6 +369,7 @@ final class CockpitWorkerInteractiveOperations {
       },
     );
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
@@ -412,6 +420,7 @@ final class CockpitWorkerInteractiveOperations {
       },
     );
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final target = await _targets.requireTarget(
       workspaceId: workspaceId,
       targetId: pair.binding.targetId,
@@ -459,6 +468,7 @@ final class CockpitWorkerInteractiveOperations {
   ) async {
     final pair = await _session(input, extra: const <String>{'maxLines'});
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readLogs.read(
@@ -498,6 +508,7 @@ final class CockpitWorkerInteractiveOperations {
       },
     );
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final id = _networkRequestId(
       pair.input.optionalString('id', maximum: 19),
       r'$.input.id',
@@ -568,6 +579,7 @@ final class CockpitWorkerInteractiveOperations {
             'Complete network bodies require an active Flutter development VM service.',
       );
     }
+    await _requireRunningApp(pair.binding);
     final requestedBody = pair.input.string('body', maximum: 16);
     final requestId = _networkRequestId(
       pair.input.string('requestId', maximum: 19),
@@ -612,6 +624,7 @@ final class CockpitWorkerInteractiveOperations {
   ) async {
     final pair = await _session(input, extra: const <String>{'maxErrors'});
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readErrors.read(
@@ -710,6 +723,7 @@ final class CockpitWorkerInteractiveOperations {
       kind: CockpitLeaseResourceKind.device,
       resourceId: target.deviceResourceId,
     );
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final iosWdaBaseUri = await _resolveIosWdaBaseUri(
       app.handle,
@@ -799,6 +813,7 @@ final class CockpitWorkerInteractiveOperations {
       required: const <String>{'command'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
@@ -841,6 +856,7 @@ final class CockpitWorkerInteractiveOperations {
       required: const <String>{'commands'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final commands = await _batchCommands(pair.input, pair.binding.sessionId);
     final app = await _registry.requireApp(pair.binding.appId);
     final recordingJson = pair.input.optionalObject('recording');
@@ -1151,6 +1167,7 @@ final class CockpitWorkerInteractiveOperations {
       extra: const <String>{'quietWindowMs', 'timeoutMs', 'includeNetworkIdle'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final timeout = boundedWorkerDuration(
       context: context,
@@ -1204,6 +1221,7 @@ final class CockpitWorkerInteractiveOperations {
       kind: CockpitLeaseResourceKind.recording,
       resourceId: pair.binding.resourceId,
     );
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final recordingJson = pair.input.optionalObject('recording');
     final result = await runWorkerApplicationOperation(
@@ -1244,6 +1262,7 @@ final class CockpitWorkerInteractiveOperations {
       required: const <String>{'width', 'height'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final requestTimeout = context.deadline.difference(DateTime.now().toUtc());
     if (requestTimeout <= Duration.zero) {
@@ -1287,6 +1306,7 @@ final class CockpitWorkerInteractiveOperations {
       grants,
       allowUnleased: kind == 'recorder.get' || kind == 'recorder.steps',
     );
+    await _requireRunningApp(pair.binding);
     final app = await _registry.requireApp(pair.binding.appId);
     final requestTimeout = context.deadline.difference(DateTime.now().toUtc());
     if (requestTimeout <= Duration.zero) {
@@ -1358,6 +1378,7 @@ final class CockpitWorkerInteractiveOperations {
     );
     final session = await _registry.requireSession(recording.sessionId);
     final app = await _registry.requireApp(recording.appId);
+    await _requireRunningApp(session);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () =>
@@ -1463,6 +1484,13 @@ final class CockpitWorkerInteractiveOperations {
       kind: CockpitLeaseResourceKind.session,
       resourceId: session.resourceId,
     );
+  }
+
+  /// Pre-flights the app's control plane: operations in this family are
+  /// served by an HTTP server on the app's main isolate, which never answers
+  /// while the isolate is paused at a debugger.
+  Future<void> _requireRunningApp(CockpitWorkerSessionBinding binding) {
+    return requireWorkerRunningApp(binding: binding, pauseGuard: _appPauseGuard);
   }
 
   Future<Map<String, Object?>> _sanitize(

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_interactive_result_profile.dart';
+import '../development/cockpit_app_pause_guard.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_worker_forwarded_port_handoff.dart';
 import 'cockpit_worker_resource_grant.dart';
@@ -102,6 +103,19 @@ Future<T> runWorkerApplicationOperation<T>({
   final result = await operation();
   context.cancellation.throwIfCancelled();
   return result;
+}
+
+/// Fails fast with `appPaused` when the development app behind [binding] is
+/// paused, before an operation dials the app's in-isolate control plane (see
+/// [CockpitAppPauseGuard]). Sessions without a development VM service (pure
+/// remote apps, release builds) have nothing to probe and pass through.
+Future<void> requireWorkerRunningApp({
+  required CockpitWorkerSessionBinding binding,
+  required CockpitAppPauseGuard? pauseGuard,
+}) async {
+  final vmServiceUri = binding.developmentHandle?.vmServiceUri;
+  if (vmServiceUri == null || pauseGuard == null) return;
+  await pauseGuard.ensureRunning(vmServiceUri: vmServiceUri);
 }
 
 Future<R> runWorkerTransactionalLaunch<T, R>({

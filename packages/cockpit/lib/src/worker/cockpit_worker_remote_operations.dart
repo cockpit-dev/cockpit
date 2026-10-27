@@ -13,6 +13,7 @@ import '../application/cockpit_read_remote_snapshot_service.dart';
 import '../application/cockpit_read_remote_status_service.dart';
 import '../application/cockpit_stop_app_service.dart';
 import '../application/cockpit_wait_remote_ui_idle_service.dart';
+import '../development/cockpit_app_pause_guard.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../targets/cockpit_target_handle.dart';
 import 'cockpit_worker_application_support.dart';
@@ -31,6 +32,7 @@ final class CockpitWorkerRemoteOperations {
     required CockpitWorkerForwardedPortHandoff portHandoff,
     required CockpitAppTempStore appTempStore,
     CockpitInteractiveSnapshotStore? snapshotStore,
+    CockpitAppPauseGuard? appPauseGuard,
     CockpitLaunchRemoteSessionService? launchService,
     CockpitStopAppService? stopAppService,
     CockpitQueryRemoteSessionService? queryService,
@@ -52,6 +54,7 @@ final class CockpitWorkerRemoteOperations {
       registry: registry,
       targets: targets,
       portHandoff: portHandoff,
+      appPauseGuard: appPauseGuard ?? CockpitVmAppPauseGuard(),
       launchService:
           launchService ??
           CockpitLaunchRemoteSessionService(
@@ -94,6 +97,7 @@ final class CockpitWorkerRemoteOperations {
     required CockpitWorkerRuntimeRegistry registry,
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerForwardedPortHandoff portHandoff,
+    required CockpitAppPauseGuard appPauseGuard,
     required CockpitLaunchRemoteSessionService launchService,
     required CockpitStopAppService stopAppService,
     required CockpitQueryRemoteSessionService queryService,
@@ -106,6 +110,7 @@ final class CockpitWorkerRemoteOperations {
   }) : _registry = registry,
        _targets = targets,
        _portHandoff = portHandoff,
+       _appPauseGuard = appPauseGuard,
        _launch = launchService,
        _stopApp = stopAppService,
        _query = queryService,
@@ -131,6 +136,7 @@ final class CockpitWorkerRemoteOperations {
   final CockpitWorkerRuntimeRegistry _registry;
   final CockpitWorkerTargetResolver _targets;
   final CockpitWorkerForwardedPortHandoff _portHandoff;
+  final CockpitAppPauseGuard _appPauseGuard;
   final CockpitLaunchRemoteSessionService _launch;
   final CockpitStopAppService _stopApp;
   final CockpitQueryRemoteSessionService _query;
@@ -311,6 +317,7 @@ final class CockpitWorkerRemoteOperations {
   ) async {
     final pair = await _session(input);
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _query.query(
@@ -344,6 +351,7 @@ final class CockpitWorkerRemoteOperations {
       extra: const <String>{'profile', 'snapshotOptions'},
     );
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _status.read(
@@ -375,6 +383,7 @@ final class CockpitWorkerRemoteOperations {
       },
     );
     _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    await _requireRunningApp(pair.binding);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
       snapshotRef: pair.input.optionalId('compareAgainstSnapshotRef'),
@@ -410,6 +419,7 @@ final class CockpitWorkerRemoteOperations {
       kind: CockpitLeaseResourceKind.capture,
       resourceId: pair.binding.resourceId,
     );
+    await _requireRunningApp(pair.binding);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _collectSnapshot.collect(
@@ -445,6 +455,7 @@ final class CockpitWorkerRemoteOperations {
       required: const <String>{'command'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final timeout = _commandTimeout(pair.input, context);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
@@ -486,6 +497,7 @@ final class CockpitWorkerRemoteOperations {
       required: const <String>{'commands'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final commands = pair.input.list('commands', maximum: 1000);
     if (commands.isEmpty) {
       throw const FormatException('Remote command batch cannot be empty.');
@@ -574,6 +586,7 @@ final class CockpitWorkerRemoteOperations {
       extra: const <String>{'quietWindowMs', 'timeoutMs', 'includeNetworkIdle'},
     );
     _requireSessionGrant(pair.binding, context, grants);
+    await _requireRunningApp(pair.binding);
     final timeout = boundedWorkerDuration(
       context: context,
       requestedMilliseconds: pair.input.optionalInteger(
@@ -642,6 +655,13 @@ final class CockpitWorkerRemoteOperations {
       kind: CockpitLeaseResourceKind.session,
       resourceId: session.resourceId,
     );
+  }
+
+  /// Pre-flights the app's control plane: operations in this family are
+  /// served by an HTTP server on the app's main isolate, which never answers
+  /// while the isolate is paused at a debugger.
+  Future<void> _requireRunningApp(CockpitWorkerSessionBinding binding) {
+    return requireWorkerRunningApp(binding: binding, pauseGuard: _appPauseGuard);
   }
 
   Duration _commandTimeout(
