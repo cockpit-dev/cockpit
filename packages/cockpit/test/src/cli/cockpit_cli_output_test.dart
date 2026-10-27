@@ -2608,4 +2608,48 @@ void main() {
     expect(stdout.toString(), isEmpty);
     expect(await File('${directory.path}/result.json').exists(), isTrue);
   });
+
+  test('inspect brief output keeps the full mounted operation map', () {
+    const renderer = CockpitCliOutputRenderer();
+    final rows = <Object?>[
+      for (var index = 0; index < 48; index += 1)
+        <String, Object?>{
+          'sel': ':row$index',
+          'label': 'Row $index',
+          'can': 'tap',
+        },
+    ];
+    final data = <String, Object?>{
+      'ok': true,
+      'action': 'inspect',
+      'session': '1',
+      'state': <String, Object?>{
+        'route': '/board',
+        'count': 64,
+        'targets': rows,
+        'more': 16,
+        'covered': 12,
+        'offscreen': 4,
+      },
+    };
+
+    final projected =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.inspect',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )
+            as Map<Object?, Object?>;
+
+    expect(
+      (projected['targets']! as List<Object?>).length,
+      48,
+      reason: 'The inspect budget must carry the whole visible map.',
+    );
+    expect(projected['covered'], 12);
+    expect(projected['offscreen'], 4);
+    expect(projected['more'], 16);
+  });
 }

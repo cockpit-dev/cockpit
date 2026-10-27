@@ -101,12 +101,22 @@ final class CockpitCliOutputRenderer {
   const CockpitCliOutputRenderer({
     this.briefMaximumBytes = 2 * 1024,
     this.moreMaximumBytes = 6 * 1024,
+    this.inspectBriefMaximumBytes = 6 * 1024,
+    this.inspectMoreMaximumBytes = 16 * 1024,
     this.presenter = const CockpitCliAiPresenter(),
   }) : assert(briefMaximumBytes > 0),
-       assert(moreMaximumBytes > 0);
+       assert(moreMaximumBytes > 0),
+       assert(inspectBriefMaximumBytes > 0),
+       assert(inspectMoreMaximumBytes > 0);
 
   final int briefMaximumBytes;
   final int moreMaximumBytes;
+
+  /// Inspect carries the mounted operation map: every visible control plus
+  /// offscreen and covered context rows. A general-purpose brief budget would
+  /// shrink that map to a handful of rows, so inspect owns a wider budget.
+  final int inspectBriefMaximumBytes;
+  final int inspectMoreMaximumBytes;
   final CockpitCliAiPresenter presenter;
 
   String renderJson({
@@ -144,12 +154,14 @@ final class CockpitCliOutputRenderer {
     if (view == CockpitCliOutputView.full) {
       return cockpitCompactJsonValue(_conciseCliValue(data));
     }
-    final maximumBytes = view == CockpitCliOutputView.brief
-        ? briefMaximumBytes
-        : moreMaximumBytes;
     final isTree = command == 'dev.tree';
     final isInspect = command == 'dev.inspect';
     final isRunList = command == 'run.list';
+    final maximumBytes = switch (view) {
+      CockpitCliOutputView.brief =>
+        isInspect ? inspectBriefMaximumBytes : briefMaximumBytes,
+      _ => isInspect ? inspectMoreMaximumBytes : moreMaximumBytes,
+    };
     final attempts = view == CockpitCliOutputView.brief
         ? isTree
               ? const <_ProjectionLimits>[
@@ -1635,6 +1647,8 @@ Map<String, Object?> _compactDevInspect(
               'targets',
               'matches',
               'more',
+              'covered',
+              'offscreen',
               'partial',
             ]),
             if (count == 0 && state['mounted'] is List<Object?>)
