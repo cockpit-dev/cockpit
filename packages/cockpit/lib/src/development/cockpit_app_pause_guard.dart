@@ -90,9 +90,9 @@ final class CockpitVmAppPauseGuard implements CockpitAppPauseGuard {
       final vm = await service.getVM();
       final rootIsolateId = _rootIsolateId(vm.isolates ?? const <IsolateRef>[]);
       if (rootIsolateId == null) return null;
-      final kind = await service.getIsolate(rootIsolateId).then(
-            (isolate) => isolate.pauseEvent?.kind,
-          );
+      final kind = await service
+          .getIsolate(rootIsolateId)
+          .then((isolate) => isolate.pauseEvent?.kind);
       return kind != null && _hardPauseKinds.contains(kind) ? kind : null;
     } finally {
       await service.dispose();

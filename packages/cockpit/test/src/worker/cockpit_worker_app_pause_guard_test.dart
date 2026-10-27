@@ -39,8 +39,11 @@ void main() {
     await expectLater(
       harness.executeCommandRun(),
       throwsA(
-        isA<CockpitApplicationServiceException>()
-            .having((error) => error.code, 'code', 'appPaused'),
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'appPaused',
+        ),
       ),
     );
     expect(harness.pauseGuard!.calls, 1);
@@ -60,8 +63,11 @@ void main() {
         'sessionId': harness.sessionId,
       }, grants: const <CockpitWorkerResourceGrant>[]),
       throwsA(
-        isA<CockpitApplicationServiceException>()
-            .having((error) => error.code, 'code', 'appPaused'),
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'appPaused',
+        ),
       ),
     );
     expect(harness.pauseGuard!.calls, 1);
@@ -186,7 +192,10 @@ final class _Harness {
             ),
           )
         : CockpitAppHandle.fromRemoteSession(remote);
-    final recorded = await registry.recordApp(targetId: targetId, handle: handle);
+    final recorded = await registry.recordApp(
+      targetId: targetId,
+      handle: handle,
+    );
     final sessionId = await registry.sessionIdForApp(recorded.appId);
     final operations = CockpitWorkerInteractiveOperations(
       workspaceId: 'workspaceA',
@@ -264,18 +273,16 @@ final class _Harness {
     sanitizer: _sanitizer,
   );
 
-  Future<Map<String, Object?>> executeCommandRun() => execute(
-    'command.run',
-    <String, Object?>{
-      'sessionId': sessionId,
-      'profile': 'minimal',
-      'command': <String, Object?>{
-        'commandId': 'c1',
-        'commandType': 'tap',
-        'timeoutMs': 5000,
-      },
-    },
-  );
+  Future<Map<String, Object?>> executeCommandRun() =>
+      execute('command.run', <String, Object?>{
+        'sessionId': sessionId,
+        'profile': 'minimal',
+        'command': <String, Object?>{
+          'commandId': 'c1',
+          'commandType': 'tap',
+          'timeoutMs': 5000,
+        },
+      });
 
   Future<void> dispose() async {
     await app.close();
@@ -327,17 +334,15 @@ final class _FakeCommandApp {
     request.response.headers.contentType = ContentType.json;
     if (request.method == 'POST' && request.uri.path == '/commands/execute') {
       request.response.write(
-        jsonEncode(
-          <String, Object?>{
-            'result': <String, Object?>{
-              'success': true,
-              'commandId': 'c1',
-              'commandType': 'tap',
-              'durationMs': 5,
-            },
-            'runtimeSteps': <Object>[],
+        jsonEncode(<String, Object?>{
+          'result': <String, Object?>{
+            'success': true,
+            'commandId': 'c1',
+            'commandType': 'tap',
+            'durationMs': 5,
           },
-        ),
+          'runtimeSteps': <Object>[],
+        }),
       );
     } else {
       request.response.statusCode = HttpStatus.notFound;

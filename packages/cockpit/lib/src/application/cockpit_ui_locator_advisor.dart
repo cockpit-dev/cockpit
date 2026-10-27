@@ -140,19 +140,29 @@ Map<String, Object?> cockpitBuildUiTargetIndex(
       .where((target) => !target.isControl && _value(target.text) != null)
       .where((target) => !_isRedundantTextCandidate(target, allTargets))
       .toList(growable: false);
+  // The same rendered label can surface through several element shapes
+  // (Text next to its RichText, a Semantics wrapper above both); one row per
+  // label is all the map needs.
+  final seenLabels = <String>{};
+  final distinctTexts = texts
+      .where((target) {
+        final label = _exactText(target.text);
+        return label == null || seenLabels.add('${target.route}|$label');
+      })
+      .toList(growable: false);
   // Visible rows describe the current screen; covered rows explain the page
   // behind an overlay; offscreen rows mark what scrolling can still reach.
   final visible = <_DevTarget>[
     ...controls.where((target) => target.visible && !target.covered),
-    ...texts.where((target) => target.visible && !target.covered),
+    ...distinctTexts.where((target) => target.visible && !target.covered),
   ]..sort(_compareForOverview);
   final covered = <_DevTarget>[
     ...controls.where((target) => target.covered),
-    ...texts.where((target) => target.covered),
+    ...distinctTexts.where((target) => target.covered),
   ]..sort(_compareForOverview);
   final offscreen = <_DevTarget>[
     ...controls.where((target) => !target.visible && !target.covered),
-    ...texts.where((target) => !target.visible && !target.covered),
+    ...distinctTexts.where((target) => !target.visible && !target.covered),
   ]..sort(_compareForOverview);
   final ranked = [...visible, ...covered, ...offscreen];
   final shown = ranked.take(limit).toList(growable: false);
@@ -554,26 +564,24 @@ final class _DevTarget {
 }
 
 bool _isRedundantTextCandidate(_DevTarget target, List<_DevTarget> candidates) {
-  if (target.hasStableIdentity ||
-      !const <String>{'Text', 'RichText'}.contains(target.type) ||
+  if (!const <String>{'Text', 'RichText', 'Semantics'}.contains(target.type) ||
       _value(target.text) == null ||
-      target.layout == null) {
+      target.layout == null ||
+      // A stable identity keeps a standalone text row, but a Semantics
+      // wrapper mirrors the control beside it and stays hidden.
+      (target.hasStableIdentity && target.type != 'Semantics')) {
     return false;
   }
   return candidates.any(
     (candidate) =>
         !identical(candidate, target) &&
-        candidate.hasStableIdentity &&
+        candidate.isControl &&
         _exactText(candidate.text) == _exactText(target.text) &&
         candidate.route == target.route &&
         candidate.scrollablePath == target.scrollablePath &&
-        _coversActions(candidate.can, target.can) &&
         _sameVerticalBand(candidate.layout, target.layout),
   );
 }
-
-bool _coversActions(List<String> stable, List<String> proxy) =>
-    stable.toSet().containsAll(proxy);
 
 bool _sameVerticalBand(_Layout? left, _Layout? right) {
   if (left == null || right == null) return false;

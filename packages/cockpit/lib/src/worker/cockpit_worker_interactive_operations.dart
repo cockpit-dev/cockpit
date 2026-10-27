@@ -1490,7 +1490,10 @@ final class CockpitWorkerInteractiveOperations {
   /// served by an HTTP server on the app's main isolate, which never answers
   /// while the isolate is paused at a debugger.
   Future<void> _requireRunningApp(CockpitWorkerSessionBinding binding) {
-    return requireWorkerRunningApp(binding: binding, pauseGuard: _appPauseGuard);
+    return requireWorkerRunningApp(
+      binding: binding,
+      pauseGuard: _appPauseGuard,
+    );
   }
 
   Future<Map<String, Object?>> _sanitize(
