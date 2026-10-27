@@ -41,3 +41,6 @@ coverage/
 # Agent training data tooling (recorded datasets and generated pattern apps)
 /tool/trajectory/datasets/
 /tool/trajectory/apps/
+
+# ZCode session state
+.zcode/
