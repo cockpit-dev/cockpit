@@ -581,7 +581,7 @@ final class FlutterCockpitBinding {
     Route<dynamic>? fallback;
     var fallbackActivity = -1;
     for (final candidate in _navigatorObservers) {
-      final candidateRoute = candidate.currentRoute;
+      final candidateRoute = candidate.effectiveNamedRoute;
       final candidateActivity = _navigatorActivity[candidate] ?? 0;
       if (candidateRoute != null && candidateActivity > fallbackActivity) {
         fallback = candidateRoute;
@@ -593,7 +593,6 @@ final class FlutterCockpitBinding {
 
   void _handleNavigatorRouteChanged(
     _FlutterCockpitNavigatorObserver observer,
-    Route<dynamic>? route,
     Route<dynamic>? transitionRoute,
   ) {
     if (_isDisposed) {
@@ -607,7 +606,8 @@ final class FlutterCockpitBinding {
         1;
     _navigatorActivity[observer] = nextActivity;
     _trackRouteTransition(transitionRoute);
-    final nextRoute = route ?? _mostRecentObservedRoute();
+    final nextRoute =
+        observer.effectiveNamedRoute ?? _mostRecentObservedRoute();
     if (_isRouteTransitioning) {
       _pendingNavigatorRoute = nextRoute;
       _hasPendingNavigatorRoute = true;
@@ -844,7 +844,6 @@ final class _FlutterCockpitNavigatorObserver extends NavigatorObserver {
 
   final void Function(
     _FlutterCockpitNavigatorObserver observer,
-    Route<dynamic>? route,
     Route<dynamic>? transitionRoute,
   )
   _onRouteChanged;
@@ -852,11 +851,27 @@ final class _FlutterCockpitNavigatorObserver extends NavigatorObserver {
 
   Route<dynamic>? get currentRoute => _routes.isEmpty ? null : _routes.last;
 
+  /// The topmost route that carries a non-empty name, or the raw top route.
+  ///
+  /// Overlay entries such as dialogs, menus, and bottom sheets push unnamed
+  /// routes above the page they cover. The addressable page below them stays
+  /// the navigator's effective route, so route naming resolves through
+  /// unnamed overlays instead of reporting the launch route for every dialog.
+  Route<dynamic>? get effectiveNamedRoute {
+    for (final route in _routes.reversed) {
+      final name = route.settings.name?.trim();
+      if (name != null && name.isNotEmpty) {
+        return route;
+      }
+    }
+    return currentRoute;
+  }
+
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _routes.remove(route);
     _routes.add(route);
-    _onRouteChanged(this, route, route);
+    _onRouteChanged(this, route);
   }
 
   @override
@@ -865,7 +880,7 @@ final class _FlutterCockpitNavigatorObserver extends NavigatorObserver {
     if (previousRoute != null && !_routes.contains(previousRoute)) {
       _routes.add(previousRoute);
     }
-    _onRouteChanged(this, previousRoute ?? currentRoute, route);
+    _onRouteChanged(this, route);
   }
 
   @override
@@ -874,7 +889,7 @@ final class _FlutterCockpitNavigatorObserver extends NavigatorObserver {
     if (previousRoute != null && !_routes.contains(previousRoute)) {
       _routes.add(previousRoute);
     }
-    _onRouteChanged(this, previousRoute ?? currentRoute, route);
+    _onRouteChanged(this, route);
   }
 
   @override
@@ -885,7 +900,7 @@ final class _FlutterCockpitNavigatorObserver extends NavigatorObserver {
     if (newRoute != null) {
       _routes.add(newRoute);
     }
-    _onRouteChanged(this, newRoute ?? currentRoute, newRoute);
+    _onRouteChanged(this, newRoute);
   }
 }
 

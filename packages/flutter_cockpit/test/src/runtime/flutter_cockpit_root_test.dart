@@ -229,6 +229,80 @@ void main() {
   );
 
   testWidgets(
+    'FlutterCockpitRoot keeps the covered page route when an unnamed overlay mounts',
+    (tester) async {
+      FlutterCockpit.initialize(
+        const FlutterCockpitConfiguration(initialRouteName: '/inbox'),
+      );
+
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+
+      await tester.pumpWidget(
+        FlutterCockpitRoot(
+          key: rootKey,
+          child: MaterialApp(
+            navigatorObservers: [FlutterCockpit.navigatorObserver],
+            initialRoute: '/inbox',
+            routes: <String, WidgetBuilder>{
+              '/inbox': (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed('/details'),
+                    child: const Text('Open details'),
+                  ),
+                ),
+              ),
+              '/details': (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Confirm'),
+                        actions: <Widget>[
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    child: const Text('Show dialog'),
+                  ),
+                ),
+              ),
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open details'));
+      await tester.pumpAndSettle();
+
+      expect(rootKey.currentState!.snapshot().routeName, '/details');
+
+      await tester.tap(find.text('Show dialog'));
+      await tester.pumpAndSettle();
+
+      final dialogSnapshot = rootKey.currentState!.snapshot();
+      expect(
+        dialogSnapshot.routeName,
+        '/details',
+        reason:
+            'An unnamed dialog route must not reset the reported route to the '
+            'launch route; the covered page stays the addressable route.',
+      );
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(rootKey.currentState!.snapshot().routeName, '/details');
+    },
+  );
+
+  testWidgets(
     'FlutterCockpitRoot does not publish a pushed route before its visible targets are ready',
     (tester) async {
       FlutterCockpit.initialize(
