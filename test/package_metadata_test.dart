@@ -108,12 +108,20 @@ void main() {
       File('plugins/kiro/cockpit/plugin.json').readAsStringSync(),
       contains('"version": "$devtoolsVersion"'),
     );
+    // A clean checkout has no ephemeral build output, so SwiftPM linkage is
+    // proven by the tracked workspace package resolution next to the runner.
+    bool shellUsesSwiftPm(String platform) => File(
+      'examples/cockpit_demo/cockpit/$platform/Runner.xcworkspace/'
+      'xcshareddata/swiftpm/Package.resolved',
+    ).existsSync();
+
     final iosUsesCocoaPods = iosDevelopmentPodLock.contains(
       'flutter_cockpit ($runtimeVersion)',
     );
     final iosUsesSwiftPm =
-        iosSwiftPackage.existsSync() &&
-        iosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
+        shellUsesSwiftPm('ios') ||
+        (iosSwiftPackage.existsSync() &&
+            iosSwiftPackage.readAsStringSync().contains('flutter_cockpit'));
     expect(
       iosUsesCocoaPods || iosUsesSwiftPm,
       isTrue,
@@ -124,8 +132,9 @@ void main() {
       'flutter_cockpit ($runtimeVersion)',
     );
     final macosUsesSwiftPm =
-        macosSwiftPackage.existsSync() &&
-        macosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
+        shellUsesSwiftPm('macos') ||
+        (macosSwiftPackage.existsSync() &&
+            macosSwiftPackage.readAsStringSync().contains('flutter_cockpit'));
     expect(
       macosUsesCocoaPods || macosUsesSwiftPm,
       isTrue,
