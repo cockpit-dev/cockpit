@@ -136,9 +136,17 @@ void main() {
       '${shellIosRoot.path}/Flutter/ephemeral/Packages/'
       'FlutterGeneratedPluginSwiftPackage/Package.swift',
     );
+    // A clean checkout has no ephemeral build output, so SwiftPM linkage is
+    // proven by the tracked workspace package resolution next to the runner.
     final shellIosUsesSwiftPm =
-        shellIosSwiftPackage.existsSync() &&
-        shellIosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
+        File(
+          '${shellIosRoot.path}/Runner.xcworkspace/xcshareddata/swiftpm/'
+          'Package.resolved',
+        ).existsSync() ||
+        (shellIosSwiftPackage.existsSync() &&
+            shellIosSwiftPackage.readAsStringSync().contains(
+              'flutter_cockpit',
+            ));
     final shellIosPodLock = File('${shellIosRoot.path}/Podfile.lock');
     final shellIosUsesCocoaPods =
         shellIosPodLock.existsSync() &&
