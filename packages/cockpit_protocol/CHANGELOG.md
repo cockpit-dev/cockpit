@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.14.2
+
+- `CockpitStepRecorder` now caps retained steps at 120 (matching the
+  runtime step buffer) with a dropped-prefix index offset, so an in-app
+  session no longer accumulates a full `CockpitSnapshot` per driver command
+  for the app lifetime.
+
 ## 4.14.1
 
 - Synchronized the protocol package with the Cockpit 4.14.1 release.

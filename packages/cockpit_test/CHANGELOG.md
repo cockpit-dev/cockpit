@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.14.2
+
+- Synchronized the shared tester package with the Cockpit 4.14.2 release.
+
 ## 4.14.1
 
 - Synchronized the shared tester package with the Cockpit 4.14.1 release.

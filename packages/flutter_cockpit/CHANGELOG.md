@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.14.2
+
+- `CockpitStepRecorder` now caps retained steps at 120 with a
+  dropped-prefix index offset, so an in-app session no longer
+  accumulates a full `CockpitSnapshot` per driver command for the app
+  lifetime.
+- `CockpitInteractionRecorder` stops accepting steps at
+  `maxRecordedSteps` (4000) and marks the session `stepsTruncated`, so a
+  long debug recording keeps a replayable prefix instead of growing for
+  the whole session.
+- A caller-driven `HttpClientResponse.redirect()` now finishes the
+  pending network record instead of leaving it in `_pending` — the
+  `inFlightCount` drains so `waitForIdle` no longer times out for the
+  rest of the session.
+- `FlutterViewCapture` disposes the captured `ui.Image` in a `finally`
+  block, so a failed crop or encode no longer retains the GPU raster
+  per call.
+- Route-information discovery caps its one-second retry timer at a 60
+  second budget, so a provider-less app stops polling the tree instead
+  of rescheduling forever.
+
 ## 4.14.1
 
 - `CockpitGestureEngine` fling actions now append a constant-velocity

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.14.2
+
+- Synchronized the CLI package with the Cockpit 4.14.2 release.
+- The worker LSP wire parser now fails a frame when the header never
+  terminates within 8 KiB or when a `Content-Length` exceeds the worker
+  maximum payload, instead of buffering without bound.
+
 ## 4.14.1
 
 - `dev fling --velocity` is honored end to end: the gesture engine appends
