@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.14.0
+
+- `dev inspect` rows now advertise `tap: control|label` so AI callers can
+  tell whether a row owns a real handler or is passive context, making
+  same-label text-vs-control selection explicit instead of guessed.
+- Selector parse failures surface as `invalidSelector` over the remote
+  session (previously a generic `targetNotFound`), and `dev inspect` adds a
+  `selectorHint` when a parsed selector matches nothing so the caller can
+  retry with the right grammar instead of repeating the same miss.
+- `dev tap --at X,Y` errors now spell out that coordinates are Flutter
+  logical pixels measured from the app-view top-left, not physical screen
+  pixels, so agents stop guessing units.
+- Bare-text selectors now prefer tap-capable targets when a label sits
+  beside its handler (for example `Text('Wallets')` inside a
+  `GestureDetector`), so `dev tap 'Wallets'` hits the control instead of a
+  passive label node.
+
 ## 4.13.0
 
 - Rebuilt `dev inspect` output as an operation map: passive text rows join

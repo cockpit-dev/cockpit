@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.14.0
+
+- Added `CockpitInvalidSelector`, the structured error surfaces raise when a
+  locator string parses but is not a valid selector, so callers can tell a
+  grammar failure from a no-match `targetNotFound`.
+- Tap-capable targets now score extra weight in `_matchPriorityScore` so
+  bare text queries prefer the control over a passive same-label node.
+
 ## 4.13.0
 
 - Added `coveredByOverlay` to targets and snapshot targets so surfaces can

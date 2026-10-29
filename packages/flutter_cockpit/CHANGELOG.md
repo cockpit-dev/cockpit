@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.14.0
+
+- Invalid selector syntax now throws `CockpitInvalidSelector` from surface
+  queries, mapped to `invalidSelector` on the remote-session endpoint
+  instead of `serverError`, so the CLI reports the real failure reason.
+- Tap feedback markers clear on route changes: the crosshair drawn by a
+  cockpit-driven gesture no longer outlives the widget it pointed at when
+  the app navigates.
+- Kept `ensureLocatorVisible` final placement atomic so the
+  `scrollUntilVisible` search loop's progress detection keeps observing a
+  settled scroll offset on every iteration.
+
 ## 4.13.0
 
 - Retained overlay-covered routes in surface discovery: the page behind a
