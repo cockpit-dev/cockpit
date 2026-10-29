@@ -2287,6 +2287,59 @@ void main() {
     expect(gestureCount, 0);
   });
 
+  test(
+    'tap resolves through the gesture path while the interaction recorder is active',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/editor');
+      var tapCount = 0;
+      var gestureCount = 0;
+
+      registry.register(
+        CockpitTarget(
+          registrationId: 'save-task',
+          text: 'Save task',
+          routeName: '/editor',
+          supportedCommands: const {CockpitCommandType.tap},
+          onTap: () {
+            tapCount += 1;
+          },
+          geometryProvider: () => const CockpitTargetGeometry(
+            left: 20,
+            top: 720,
+            width: 220,
+            height: 48,
+            viewportLeft: 0,
+            viewportTop: 0,
+            viewportWidth: 430,
+            viewportHeight: 800,
+            viewId: 1,
+          ),
+        ),
+      );
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        gestureHandler: (_) async {
+          gestureCount += 1;
+        },
+        interactionRecorderActive: () => true,
+      );
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-save',
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(text: 'Save task'),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      // While recording, auto activation must emit real pointer events so the
+      // capture layer records the tap — the direct callback path is skipped.
+      expect(gestureCount, 1);
+      expect(tapCount, 0);
+    },
+  );
+
   test('tap explicit gesture remains available for passive targets', () async {
     final registry = CockpitTargetRegistry(routeName: '/dashboard');
     var gestureCount = 0;

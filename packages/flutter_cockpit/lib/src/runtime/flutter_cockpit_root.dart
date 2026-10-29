@@ -877,6 +877,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       interactionPolicy: FlutterCockpit.binding.configuration.interactionPolicy,
       isRecordingActive: () =>
           FlutterCockpit.binding.activeRecordingSession != null,
+      interactionRecorderActive: () =>
+          _interactionRecorder?.phase == CockpitRecorderPhase.recording,
       backNavigationHandler: () async {
         final navigator = FlutterCockpit.binding.navigatorObserver.navigator;
         if (navigator != null && await navigator.maybePop()) {

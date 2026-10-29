@@ -102,6 +102,7 @@ final class CockpitGestureEngine {
           initialHoldDuration: action.initialHoldDuration,
           pointerDeviceKind: action.pointerDeviceKind,
           buttons: action.buttons,
+          releaseVelocity: action.velocity,
         );
       case CockpitGestureActionType.swipe:
         await _performSwipe(
@@ -563,6 +564,7 @@ final class CockpitGestureEngine {
     required Duration initialHoldDuration,
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
+    double? releaseVelocity,
   }) {
     return _dispatchPolylineDrag(
       geometry: geometry,
@@ -575,6 +577,7 @@ final class CockpitGestureEngine {
       frameInterval: frameInterval,
       pointerDeviceKind: pointerDeviceKind,
       buttons: buttons,
+      releaseVelocity: releaseVelocity,
     );
   }
 
@@ -1169,6 +1172,7 @@ final class CockpitGestureEngine {
     Duration? frameInterval,
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
+    double? releaseVelocity,
   }) async {
     final normalizedWaypoints = _normalizeWaypoints(waypoints);
     if (normalizedWaypoints.length < 2) {
@@ -1209,10 +1213,43 @@ final class CockpitGestureEngine {
       }
 
       var previousUs = 0;
-      for (var index = 0; index < sampledPositions.length; index += 1) {
-        final t = (index + 1) / sampledPositions.length;
-        final nextUs = (duration.inMicroseconds * t).round();
-        final next = sampledPositions[index];
+      // A velocity-bearing gesture must carry motion through the whole
+      // trailing window VelocityTracker samples (~40ms), not just a single
+      // terminal jump — a last-sample spike averages out against the earlier
+      // stationary samples. When a release velocity is requested, the sampled
+      // path covers only `bulkDistance` over `duration`, then a short
+      // constant-velocity release tail travels `releaseVelocity *
+      // releaseWindow` across several moves ending at `end`, so every sample
+      // in the tracker's history window moves at the release velocity. The
+      // tail is anchored to the CLAMPED end so it stays on-screen even when
+      // the authored delta overshoots the edge.
+      final totalUs = duration.inMicroseconds;
+      final stepCount = sampledPositions.length;
+      const releaseWindowUs = 40000; // ~VelocityTracker history window.
+      const releaseSteps = 6;
+      int releaseWindowEffectiveUs = 0;
+      Offset releaseTo = end;
+      if (releaseVelocity != null && releaseVelocity > 0 && totalUs > 0) {
+        releaseWindowEffectiveUs = releaseWindowUs;
+        releaseTo = _clampToViewport(geometry, end);
+      }
+      for (var index = 0; index < stepCount; index += 1) {
+        final t = (index + 1) / stepCount;
+        final nextUs = (totalUs * t).round();
+        var next = sampledPositions[index];
+        if (releaseWindowEffectiveUs > 0) {
+          // Pull the whole sampled path back by the release-tail distance so
+          // it ends `releaseVelocity * releaseWindow` short of `releaseTo`;
+          // the appended tail then carries the rest at the release velocity.
+          final ray = releaseTo - start;
+          final rayLength = ray.distance;
+          final releaseDist =
+              releaseVelocity! * (releaseWindowEffectiveUs / 1000000);
+          final bulkFraction = rayLength > 0
+              ? ((rayLength - releaseDist) / rayLength).clamp(0.0, 1.0)
+              : 0.0;
+          next = start + ((releaseTo - start) * (t * bulkFraction));
+        }
         _dispatchMove(
           pointer: 1,
           geometry: geometry,
@@ -1226,13 +1263,44 @@ final class CockpitGestureEngine {
         await _delay(Duration(microseconds: nextUs - previousUs));
         previousUs = nextUs;
       }
+      if (releaseWindowEffectiveUs > 0) {
+        // Emit the constant-velocity release tail: `releaseSteps` moves over
+        // `releaseWindowEffectiveUs` each advancing `releaseVelocity *
+        // (window/steps)` along the ray, ending at `releaseTo`.
+        final ray = releaseTo - start;
+        final rayLength = ray.distance;
+        final releaseDist =
+            releaseVelocity! * (releaseWindowEffectiveUs / 1000000);
+        final tailFrom = rayLength > 0
+            ? releaseTo - (ray / rayLength * math.min(releaseDist, rayLength))
+            : releaseTo;
+        for (var step = 1; step <= releaseSteps; step += 1) {
+          final stepT = step / releaseSteps;
+          final nextUs = totalUs + (releaseWindowEffectiveUs * stepT).round();
+          final next = tailFrom + ((releaseTo - tailFrom) * stepT);
+          _dispatchMove(
+            pointer: 1,
+            geometry: geometry,
+            previousPosition: previous,
+            nextPosition: next,
+            pointerDeviceKind: pointerDeviceKind,
+            buttons: buttons,
+            timeStamp: holdDuration + Duration(microseconds: nextUs),
+          );
+          previous = next;
+          await _delay(Duration(microseconds: nextUs - previousUs));
+          previousUs = nextUs;
+        }
+      }
 
       _dispatchUp(
         pointer: 1,
         geometry: geometry,
-        position: end,
+        position: releaseTo,
         pointerDeviceKind: pointerDeviceKind,
-        timeStamp: holdDuration + duration,
+        timeStamp:
+            holdDuration +
+            Duration(microseconds: totalUs + releaseWindowEffectiveUs),
       );
       active = false;
     } catch (_) {

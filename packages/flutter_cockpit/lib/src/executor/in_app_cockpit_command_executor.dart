@@ -97,6 +97,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitInteractionPolicy interactionPolicy =
         const CockpitInteractionPolicy(),
     CockpitRecordingActivityProbe? isRecordingActive,
+    CockpitRecordingActivityProbe? interactionRecorderActive,
     CockpitRouteNameSynchronizer? routeNameSynchronizer,
     String platform = 'flutter',
     String transportType = 'inApp',
@@ -124,6 +125,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
          keyEventHandler: keyEventHandler ?? _defaultKeyEventHandler,
          interactionPolicy: interactionPolicy,
          isRecordingActive: isRecordingActive ?? _defaultRecordingActivityProbe,
+         interactionRecorderActive:
+             interactionRecorderActive ?? _defaultRecordingActivityProbe,
          routeNameSynchronizer: routeNameSynchronizer,
          platform: platform,
          transportType: transportType,
@@ -241,6 +244,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   CockpitInteractionPolicy get _interactionPolicy => _context.interactionPolicy;
   CockpitRecordingActivityProbe get _isRecordingActive =>
       _context.isRecordingActive;
+  CockpitRecordingActivityProbe get _isInteractionRecorderActive =>
+      _context.interactionRecorderActive;
   CockpitRouteNameSynchronizer? get _routeNameSynchronizer =>
       _context.routeNameSynchronizer;
   String get _platform => _context.platform;
@@ -523,9 +528,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         target.routeName.isNotEmpty) {
       previousRouteName = target.routeName;
     }
-    late final _TapActivation activation;
+    late _TapActivation activation;
     try {
       activation = _tapActivationParameter(command);
+      // The interaction recorder observes real pointer events, which only the
+      // gesture activation path emits. A direct/semantic activation invokes
+      // the target's callback without synthesizing PointerDown/PointerUp, so
+      // an in-app recording would capture the route change but never the tap
+      // step. While the interaction recorder is active, resolve the default
+      // `auto` to the gesture path; explicit `activation` values still win.
+      if (activation == _TapActivation.auto && _isInteractionRecorderActive()) {
+        activation = _TapActivation.gesture;
+      }
     } on ArgumentError catch (error) {
       return _failureExecution(
         command: command,
@@ -4430,6 +4444,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         initialHoldDuration: initialHoldDuration,
         pointerDeviceKind: pointerDeviceKind,
         buttons: _buttonsParameter(command),
+        velocity: _doubleParameter(command, 'velocity'),
       ),
       _ => throw ArgumentError(
         'Directional gestures only support drag and fling fallbacks.',

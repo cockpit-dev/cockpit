@@ -52,6 +52,7 @@ final class CockpitGestureAction {
     this.frameInterval,
     this.initialHoldDuration = Duration.zero,
     this.sequence,
+    this.velocity,
   });
 
   const CockpitGestureAction.tap({
@@ -249,6 +250,7 @@ final class CockpitGestureAction {
     Duration initialHoldDuration = Duration.zero,
     PointerDeviceKind pointerDeviceKind = PointerDeviceKind.touch,
     int buttons = kPrimaryButton,
+    double? velocity,
   }) : this._(
          type: CockpitGestureActionType.fling,
          target: target,
@@ -264,6 +266,7 @@ final class CockpitGestureAction {
          sampleHz: sampleHz,
          frameInterval: frameInterval,
          initialHoldDuration: initialHoldDuration,
+         velocity: velocity,
        );
 
   const CockpitGestureAction.pinchZoom({
@@ -395,4 +398,12 @@ final class CockpitGestureAction {
   final Duration? frameInterval;
   final Duration initialHoldDuration;
   final CockpitMultiTouchSequence? sequence;
+
+  /// Requested release velocity in logical pixels/second for [fling].
+  ///
+  /// `null` means the gesture carries no explicit release speed and the
+  /// pointer-up lands at the same timestamp as the final move, reporting a
+  /// zero release velocity. When set, the engine leaves a small timestamp gap
+  /// before pointer-up so the trailing move reports this velocity.
+  final double? velocity;
 }

@@ -102,6 +102,7 @@ final class CockpitInAppCommandContext {
     required CockpitKeyEventHandler keyEventHandler,
     required CockpitInteractionPolicy interactionPolicy,
     required CockpitRecordingActivityProbe isRecordingActive,
+    required CockpitRecordingActivityProbe interactionRecorderActive,
     required CockpitRouteNameSynchronizer? routeNameSynchronizer,
     required String platform,
     required String transportType,
@@ -129,6 +130,7 @@ final class CockpitInAppCommandContext {
       keyEventHandler: keyEventHandler,
       interactionPolicy: interactionPolicy,
       isRecordingActive: isRecordingActive,
+      interactionRecorderActive: interactionRecorderActive,
       routeNameSynchronizer: routeNameSynchronizer,
       platform: platform,
       transportType: transportType,
@@ -154,6 +156,7 @@ final class CockpitInAppCommandContext {
     required this.keyEventHandler,
     required this.interactionPolicy,
     required this.isRecordingActive,
+    required this.interactionRecorderActive,
     required this.routeNameSynchronizer,
     required this.platform,
     required this.transportType,
@@ -177,6 +180,7 @@ final class CockpitInAppCommandContext {
   final CockpitKeyEventHandler keyEventHandler;
   final CockpitInteractionPolicy interactionPolicy;
   final CockpitRecordingActivityProbe isRecordingActive;
+  final CockpitRecordingActivityProbe interactionRecorderActive;
   final CockpitRouteNameSynchronizer? routeNameSynchronizer;
   final String platform;
   final String transportType;
