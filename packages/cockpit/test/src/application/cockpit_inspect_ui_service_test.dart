@@ -136,6 +136,7 @@ void main() {
           'sel': '@target-1999',
           'label': 'Target 1999',
           'can': 'tap',
+          'tap': 'control',
         },
       ]);
       expect(result.snapshot?.visibleTargets, hasLength(24));

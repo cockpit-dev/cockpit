@@ -114,6 +114,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   CockpitRemoteSessionBridgeClient? _remoteSessionBridgeClient;
   Future<void>? _remoteSessionStartFuture;
   CockpitTapFeedbackController? _tapFeedbackController;
+  bool _tapFeedbackRouteListenerAttached = false;
   CockpitInteractionRecorder? _interactionRecorder;
   CockpitRecorderController? _recorderController;
   final Map<RouteInformationProvider, VoidCallback> _routeInformationUnbinders =
@@ -727,8 +728,18 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         kDebugMode &&
         FlutterCockpit.binding.configuration.diagnostics.enableTapFeedback;
     if (shouldEnable) {
-      _tapFeedbackController ??= CockpitTapFeedbackController();
+      final controller = _tapFeedbackController ??=
+          CockpitTapFeedbackController();
+      if (!_tapFeedbackRouteListenerAttached) {
+        FlutterCockpit.binding.currentRouteName.addListener(controller.clear);
+        _tapFeedbackRouteListenerAttached = true;
+      }
       return;
+    }
+    final controller = _tapFeedbackController;
+    if (controller != null && _tapFeedbackRouteListenerAttached) {
+      FlutterCockpit.binding.currentRouteName.removeListener(controller.clear);
+      _tapFeedbackRouteListenerAttached = false;
     }
     _tapFeedbackController?.dispose();
     _tapFeedbackController = null;

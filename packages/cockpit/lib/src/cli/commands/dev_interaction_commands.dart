@@ -1121,10 +1121,15 @@ Map<String, Object?> _optionalPoint(ArgResults arguments) {
       .map((part) => double.tryParse(part.trim()))
       .toList();
   if (parts.length != 2 || parts.any((part) => part == null)) {
-    throw const FormatException('--at must use X,Y coordinates.');
+    throw const FormatException(
+      '--at must use X,Y coordinates in Flutter logical pixels '
+      '(from the top-left of the app view, not physical screen pixels).',
+    );
   }
   if (!parts[0]!.isFinite || !parts[1]!.isFinite) {
-    throw const FormatException('--at must use finite X,Y coordinates.');
+    throw const FormatException(
+      '--at must use finite X,Y coordinates in Flutter logical pixels.',
+    );
   }
   return <String, Object?>{'x': parts[0], 'y': parts[1]};
 }

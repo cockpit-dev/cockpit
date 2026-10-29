@@ -418,6 +418,12 @@ final class CockpitRemoteSessionEndpointHandler {
         'error': 'invalidPayload',
         'message': error.message,
       }, statusCode: HttpStatus.badRequest);
+    } on CockpitInvalidSelector catch (error) {
+      return CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
+        'error': 'invalidSelector',
+        'message': error.message,
+        if (error.details.isNotEmpty) 'details': error.details,
+      }, statusCode: HttpStatus.badRequest);
     } catch (error) {
       return CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
         'error': 'serverError',
@@ -936,6 +942,7 @@ final class CockpitRemoteSessionEndpointHandler {
               CockpitArtifactRef(
                 role: 'widget-tree',
                 relativePath:
+                    // dartq: deterministic
                     'trees/${cockpitSortableTimestampToken(DateTime.now())}_widget_tree.json',
               )
         : snapshot.diagnosticsArtifactRef ??

@@ -1153,7 +1153,11 @@ void main() {
     }, 'checkout.submit');
 
     expect(result['matches'], <Object?>[
-      <String, Object?>{'sel': '[sem="checkout.submit"]', 'can': 'tap|hold'},
+      <String, Object?>{
+        'sel': '[sem="checkout.submit"]',
+        'can': 'tap|hold',
+        'tap': 'control',
+      },
     ]);
   });
 
@@ -1181,6 +1185,7 @@ void main() {
         'label': 'Open command lab',
         'can': 'tap',
         'state': 'offscreen',
+        'tap': 'control',
       },
     ]);
   });
@@ -1209,6 +1214,7 @@ void main() {
         'sel': '@task-title-field',
         'label': 'Task title',
         'can': 'tap|type',
+        'tap': 'control',
       },
     ]);
   });
@@ -1255,6 +1261,7 @@ void main() {
         'sel': 'TextField@task-title-field[route="/editor"]',
         'label': 'Task title',
         'can': 'tap|type',
+        'tap': 'control',
       },
     ]);
   });
@@ -1442,11 +1449,13 @@ void main() {
         'sel': '@task-a >> @open',
         'label': 'Open',
         'can': 'tap',
+        'tap': 'control',
       },
       <String, Object?>{
         'sel': '@task-b >> @open',
         'label': 'Open',
         'can': 'tap',
+        'tap': 'control',
       },
     ]);
   });
@@ -1523,7 +1532,7 @@ void main() {
 
     expect(result['count'], 1);
     expect(result['matches'], <Object?>[
-      <String, Object?>{'sel': '/inspect', 'can': 'tap'},
+      <String, Object?>{'sel': '/inspect', 'can': 'tap', 'tap': 'control'},
     ]);
   });
 
@@ -1618,6 +1627,7 @@ void main() {
       <String, Object?>{
         'sel': '[sem="Open task Selector proof"]',
         'can': 'tap|hold',
+        'tap': 'control',
       },
     ]);
   });
@@ -1688,6 +1698,7 @@ void main() {
       <String, Object?>{
         'sel': '[sem="Open task Android CLI verification"]',
         'can': 'tap|hold|double',
+        'tap': 'control',
       },
     ]);
   });
@@ -1745,7 +1756,7 @@ void main() {
 
     expect(result['count'], 1);
     expect(result['matches'], <Object?>[
-      <String, Object?>{'sel': 'Inbox'},
+      <String, Object?>{'sel': 'Inbox', 'tap': 'label'},
     ]);
   });
 

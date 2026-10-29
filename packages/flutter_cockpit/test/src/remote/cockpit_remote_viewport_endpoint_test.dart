@@ -70,10 +70,40 @@ void main() {
     expect(response.statusCode, HttpStatus.badRequest);
     expect(response.jsonBody?['error'], 'invalidPayload');
   });
+
+  test('snapshot endpoint returns invalidSelector for a bad locator', () async {
+    final response =
+        await _handler(
+          snapshotProvider: ({required options}) async =>
+              throw CockpitInvalidSelector(
+                'Invalid selector "TabBar >> missing": unmatched ancestor.',
+                details: const <String, Object?>{'query': 'TabBar >> missing'},
+              ),
+        ).handle(
+          CockpitRemoteSessionEndpointRequest(
+            method: 'GET',
+            uri: Uri.parse('/snapshot?query=TabBar%20%3E%3E%20missing'),
+            jsonBody: const <String, Object?>{},
+          ),
+        );
+
+    expect(response.statusCode, HttpStatus.badRequest);
+    expect(response.jsonBody?['error'], 'invalidSelector');
+    expect(
+      response.jsonBody?['message'],
+      contains('Invalid selector'),
+      reason: 'The locator error must reach the caller, not a transport error.',
+    );
+    expect(
+      (response.jsonBody?['details'] as Map<Object?, Object?>)['query'],
+      'TabBar >> missing',
+    );
+  });
 }
 
 CockpitRemoteSessionEndpointHandler _handler({
   CockpitRemoteViewportResizer? viewportResizer,
+  CockpitRemoteSessionSnapshotProvider? snapshotProvider,
 }) => CockpitRemoteSessionEndpointHandler(
   configuration: const CockpitRemoteSessionConfiguration(
     enabled: true,
@@ -81,7 +111,9 @@ CockpitRemoteSessionEndpointHandler _handler({
     port: 0,
   ),
   statusProvider: () async => throw StateError('unused'),
-  snapshotProvider: ({required options}) async => throw StateError('unused'),
+  snapshotProvider:
+      snapshotProvider ??
+      ({required options}) async => throw StateError('unused'),
   commandExecutor: (_) async => throw StateError('unused'),
   viewportResizer: viewportResizer,
   startRecording: (_) async => throw StateError('unused'),

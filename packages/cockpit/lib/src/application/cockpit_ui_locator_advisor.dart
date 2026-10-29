@@ -97,6 +97,17 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
       : null;
   final mountedTargets = mounted?['targets'];
 
+  // A selector that parses but finds nothing usually means the caller wrote
+  // a valid chain against a type or scope the discovery layer did not expose
+  // (a private widget class name, a merged Semantics wrapper, an offscreen
+  // ancestor). Point that out explicitly so `dev inspect` does not look like
+  // the element is simply absent.
+  final selectorHint = selector != null && matches.isEmpty
+      ? 'Selector parsed but matched nothing. Check that the ancestor types '
+            'in "a >> b" are visible locators (public widget types), or use '
+            'the mounted rows above to pick the label/type that is present.'
+      : null;
+
   return <String, Object?>{
     'query': query.trim(),
     'count': matches.length,
@@ -113,6 +124,7 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
     if (mounted?['route'] != null) 'route': mounted!['route'],
     if (mountedTargets is List<Object?> && mountedTargets.isNotEmpty)
       'mounted': mountedTargets,
+    'selectorHint': ?selectorHint,
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
     if (queryTargetCount != null &&
@@ -467,10 +479,18 @@ final class _DevTarget {
       'label': ?label,
       'can': ?actions,
       'state': ?_compactTargetState(this),
+      'tap': ?tapRole,
       'value': ?_compactControlValue(control?.value),
       if (advice.ambiguous) 'ambiguous': true,
     };
   }
+
+  /// Whether this row is a real control the caller can tap, or a passive
+  /// label/text row that only describes the screen. `control` means the row
+  /// advertises tap/hold/double or an interactive state; `label` means the
+  /// row is descriptive only and `dev tap` will fall back to hitting the
+  /// enclosing control instead of having its own handler.
+  String? get tapRole => isControl ? 'control' : 'label';
 
   Map<String, Object?> overviewResult(
     List<_DevTarget> targets, {
@@ -489,6 +509,7 @@ final class _DevTarget {
       if (needsPosition) 'at': ?_compactPosition(layout),
       'can': ?actions,
       'state': ?_compactTargetState(this),
+      'tap': ?tapRole,
       'value': ?_compactControlValue(control?.value),
     };
   }
@@ -530,6 +551,7 @@ final class _DevTarget {
       'label': ?label,
       'can': ?actions,
       'state': ?_compactTargetState(this),
+      'tap': ?tapRole,
       'value': ?_compactControlValue(control?.value),
     };
   }

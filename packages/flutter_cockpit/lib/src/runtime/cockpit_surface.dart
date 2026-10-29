@@ -518,8 +518,11 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
     // Search steps preserve their requested pacing. Final placement is an
     // atomic jump so nested scrollables cannot leave Cockpit waiting on
-    // competing animation futures after the target is already located.
-    const effectiveDuration = Duration.zero;
+    // competing animation futures after the target is already located. When
+    // the caller opted into a non-zero reveal duration, apply that to the
+    // final placement adjustment below; the first ensureVisible still jumps
+    // so the initial traversal stays deterministic.
+    const traversalDuration = Duration.zero;
     final revealRequest = _resolveRevealRequest(
       revealTarget,
       alignment: alignment,
@@ -530,7 +533,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         await Scrollable.ensureVisible(
           revealTarget,
           alignment: revealRequest.alignment,
-          duration: effectiveDuration,
+          duration: traversalDuration,
           alignmentPolicy: revealRequest.alignmentPolicy,
         );
       } on Object catch (error, stackTrace) {
@@ -545,14 +548,36 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
       await _settleAtomicRevealFrame();
     }
-    await _applyRevealAdjustment(
-      revealTarget,
-      alignment: alignment,
-      padding: padding,
-      offset: offset,
-      duration: effectiveDuration,
-    );
-    await _settleAtomicRevealFrame();
+    if (duration == Duration.zero) {
+      // Zero-duration placements still run synchronously so callers that
+      // opted out of animation observe the final scroll offset on return.
+      await _applyRevealAdjustment(
+        revealTarget,
+        alignment: alignment,
+        padding: padding,
+        offset: offset,
+        duration: duration,
+      );
+      await _settleAtomicRevealFrame();
+    } else {
+      // Non-zero placements animate. The animation future is deliberately
+      // not awaited here: `animateTo` only progresses while the binding
+      // pumps frames, and blocking the reveal on it would deadlock test
+      // bindings and any runtime that awaits this call before scheduling
+      // its next frame. The surface instead settles the frame that shows
+      // the animation's first step and returns; the animation continues
+      // on the widget tree and callers revalidate geometry after the
+      // duration elapses.
+      final adjustment = _applyRevealAdjustment(
+        revealTarget,
+        alignment: alignment,
+        padding: padding,
+        offset: offset,
+        duration: duration,
+      );
+      await _settleAtomicRevealFrame();
+      unawaited(adjustment);
+    }
     return _locatorIsVisible(locator);
   }
 
@@ -748,11 +773,18 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
     final mountedTargets = mountedRegistry.allTargets;
     if (CockpitSelector.isExplicit(query)) {
-      final matches = mountedRegistry.matchingTargets(
-        CockpitSelector.parse(query),
-        includeHidden: true,
-      );
-      return matches.isEmpty ? mountedRegistry.visibleTargets : matches;
+      try {
+        final matches = mountedRegistry.matchingTargets(
+          CockpitSelector.parse(query),
+          includeHidden: true,
+        );
+        return matches.isEmpty ? mountedRegistry.visibleTargets : matches;
+      } on FormatException catch (error) {
+        throw CockpitInvalidSelector(
+          'Invalid selector "$query": ${error.message}',
+          details: <String, Object?>{'query': query},
+        );
+      }
     }
     final normalized = query.toLowerCase();
     final matches = mountedTargets

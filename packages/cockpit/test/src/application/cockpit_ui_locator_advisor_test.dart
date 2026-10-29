@@ -67,8 +67,42 @@ void main() {
     expect(rows, hasLength(2));
     expect(rows.first['sel'], 'Inbox');
     expect(rows.first.containsKey('can'), isFalse);
+    expect(rows.first['tap'], 'label');
     expect(rows.last['label'], 'Open');
     expect(rows.last['can'], 'tap');
+    expect(rows.last['tap'], 'control');
+  });
+
+  test('tap resolves to the control row when a label shadows a control', () {
+    // When a text label sits beside its tappable control (the common
+    // bottom-navigation shape), the operation map must tell the caller which
+    // row actually owns the handler so `dev tap` does not hit the label.
+    final index = cockpitBuildUiTargetIndex(
+      CockpitSnapshot(
+        routeName: '/page',
+        visibleTargets: <CockpitSnapshotTarget>[
+          _target(
+            'native.tab-wallets',
+            text: 'Wallets',
+            typeName: 'TextButton',
+            keyValue: 'tab-wallets',
+            commands: const <CockpitCommandType>[CockpitCommandType.tap],
+            dy: 560,
+          ),
+          _target(
+            'native.wallets-label',
+            text: 'Wallets',
+            typeName: 'Text',
+            dy: 560,
+          ),
+        ],
+      ),
+    );
+
+    final rows = _rows(index);
+    expect(rows, hasLength(1));
+    expect(rows.first['tap'], 'control');
+    expect(rows.first['can'], 'tap');
   });
 
   test('surface index orders visible, covered, then offscreen rows', () {

@@ -62,6 +62,20 @@ final class CockpitTapFeedbackController extends ChangeNotifier {
   List<_CockpitTapFeedbackMarkerModel> get _markersView =>
       List<_CockpitTapFeedbackMarkerModel>.unmodifiable(_markers);
 
+  /// Immediately expire every visible marker. Route changes and modal
+  /// transitions should clear the ripple so it does not outlive the widget
+  /// it was pointing at.
+  void clear() {
+    if (_markers.isEmpty) {
+      return;
+    }
+    for (final marker in _markers) {
+      _timers.remove(marker.id)?.cancel();
+    }
+    _markers.clear();
+    notifyListeners();
+  }
+
   void record(CockpitGestureAction action) {
     final geometry = action.geometry;
     final offset =

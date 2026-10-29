@@ -1650,6 +1650,7 @@ Map<String, Object?> _compactDevInspect(
               'covered',
               'offscreen',
               'partial',
+              'selectorHint',
             ]),
             if (count == 0 && state['mounted'] is List<Object?>)
               'mounted': (state['mounted']! as List<Object?>)

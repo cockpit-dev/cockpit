@@ -1076,6 +1076,16 @@ final class CockpitTargetRegistry {
     }
     if (target.supportedCommands.isNotEmpty) {
       score += 8;
+      // A text match often lands on a label beside its tappable control
+      // (for example `Text('Wallets')` inside a `GestureDetector`); prefer
+      // the control so `dev tap 'Wallets'` hits the handler rather than a
+      // passive label node.
+      if (target.supportedCommands.contains(CockpitCommandType.tap)) {
+        score += 10;
+      }
+      if (target.supportedCommands.contains(CockpitCommandType.longPress)) {
+        score += 2;
+      }
     }
     if (target.keyValue != null && target.keyValue!.isNotEmpty) {
       score += 4;

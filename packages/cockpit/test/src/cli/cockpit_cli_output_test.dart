@@ -2652,4 +2652,53 @@ void main() {
     expect(projected['offscreen'], 4);
     expect(projected['more'], 16);
   });
+
+  test('inspect brief output keeps selectorHint and tap on each row', () {
+    const renderer = CockpitCliOutputRenderer();
+    final data = <String, Object?>{
+      'ok': true,
+      'action': 'inspect',
+      'session': '1',
+      'state': <String, Object?>{
+        'route': '/home',
+        'query': 'Wallets',
+        'count': 0,
+        'targets': <Object?>[],
+        'mounted': <Object?>[
+          <String, Object?>{
+            'sel': ':tab-wallets',
+            'label': 'Wallets',
+            'can': 'tap',
+            'tap': 'control',
+          },
+          <String, Object?>{
+            'sel': 'Wallets',
+            'label': 'Wallets',
+            'tap': 'label',
+          },
+        ],
+        'selectorHint':
+            'Selector parsed but matched nothing. Check the ancestor types.',
+      },
+    };
+
+    final projected =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.inspect',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )
+            as Map<Object?, Object?>;
+
+    expect(projected['selectorHint'], isNotNull);
+    final mounted = projected['mounted']! as List<Object?>;
+    expect(
+      (mounted[0]! as Map<Object?, Object?>)['tap'],
+      'control',
+      reason: 'The tap role must survive the brief projection.',
+    );
+    expect((mounted[1]! as Map<Object?, Object?>)['tap'], 'label');
+  });
 }
