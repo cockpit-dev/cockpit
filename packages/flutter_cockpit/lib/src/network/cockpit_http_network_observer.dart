@@ -710,7 +710,39 @@ final class _CockpitObservedHttpClientResponse extends Stream<List<int>>
     String? method,
     Uri? url,
     bool? followLoops,
-  ]) => _delegate.redirect(method, url, followLoops ?? false);
+  ]) async {
+    // A caller-driven redirect returns the raw delegate response, which
+    // bypasses the observed transform-based finish paths in [listen].
+    // The redirect response replaces the original stream, so the pending
+    // record must finish now — otherwise it stays in `_pending` forever and
+    // `countsAsInFlight` keeps `waitForIdle` timed out for the rest of the
+    // session. Record the terminal status/headers of the redirect hop
+    // before handing the raw response to the caller.
+    try {
+      final response = await _delegate.redirect(method, url, followLoops);
+      if (!_completed) {
+        _completed = true;
+        pending.statusCode = response.statusCode;
+        _captureSafely(
+          () => pending.captureResponseHeaders(
+            observer.snapshotHeaders(response.headers),
+          ),
+        );
+        _captureSafely(() {
+          observer._markActivity(pending);
+          observer._finish(pending);
+        });
+      }
+      return response;
+    } on Object catch (error) {
+      if (!_completed) {
+        _completed = true;
+        pending.error = error.toString();
+        _captureSafely(() => observer._finish(pending));
+      }
+      rethrow;
+    }
+  }
 
   @override
   Future<Socket> detachSocket() async {

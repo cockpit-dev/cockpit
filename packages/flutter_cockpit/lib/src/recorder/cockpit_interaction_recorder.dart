@@ -61,12 +61,29 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     CockpitReplayGesturePerformer? gesturePerformer,
     String? Function()? routeNameProvider,
     CockpitViewportGeometryProvider? viewportGeometryProvider,
+    int maxRecordedSteps = _defaultMaxRecordedSteps,
   }) : _now = now ?? DateTime.now,
        _registry = registry,
        _waitForIdle = waitForIdle,
        _gesturePerformer = gesturePerformer,
        _routeNameProvider = routeNameProvider,
-       _viewportGeometryProvider = viewportGeometryProvider;
+       _viewportGeometryProvider = viewportGeometryProvider,
+       _maxRecordedSteps = maxRecordedSteps {
+    if (maxRecordedSteps < 1) {
+      throw ArgumentError.value(
+        maxRecordedSteps,
+        'maxRecordedSteps',
+        'must be at least 1',
+      );
+    }
+  }
+
+  /// Default retention bound on the recorded step list. Steps must survive
+  /// until the next [start] or [export], so the cap only guards against a
+  /// session that grows without bound — reaching it stops accepting new
+  /// steps and marks the session `stepsTruncated` rather than corrupting
+  /// the replayable prefix.
+  static const int _defaultMaxRecordedSteps = 4000;
 
   static const Duration _replayQuietWindow = Duration(milliseconds: 300);
   static const Duration _replaySettleTimeout = Duration(seconds: 5);
@@ -86,6 +103,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   final CockpitReplayGesturePerformer? _gesturePerformer;
   final String? Function()? _routeNameProvider;
   final CockpitViewportGeometryProvider? _viewportGeometryProvider;
+  final int _maxRecordedSteps;
   CockpitGestureEngine? _gestureEngine;
 
   /// Subtree exclusion registry the capture layer consults per event.
@@ -104,6 +122,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   DateTime? _pausedAt;
   DateTime? _endedAt;
   bool _replaying = false;
+  bool _stepsTruncated = false;
 
   /// Hook invoked at the top of [stop], while the session is still in the
   /// `recording` or `paused` phase — so a hook's [recordInteractionStep]
@@ -133,6 +152,11 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   /// The recorded steps of the current session, oldest first.
   List<CockpitInteractionStep> get steps =>
       List<CockpitInteractionStep>.unmodifiable(_steps);
+
+  /// Whether the session hit `maxRecordedSteps` and stopped accepting new
+  /// steps. A truncated session is still replayable — the recorded prefix
+  /// is intact — but later interactions were dropped rather than recorded.
+  bool get stepsTruncated => _stepsTruncated;
 
   /// The currently open segment labels, stack order (bottom first).
   List<String> get openSegments => List<String>.unmodifiable(_segments);
@@ -177,6 +201,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     _endedAt = null;
     _stepSequence = 0;
     _steps.clear();
+    _stepsTruncated = false;
     _segments.clear();
     _phase = CockpitRecorderPhase.recording;
     notifyListeners();
@@ -777,6 +802,13 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
   /// `segments`, and `settledAfterMs` are engine-owned and re-stamped here.
   void recordInteractionStep(CockpitInteractionStep step) {
     if (_phase != CockpitRecorderPhase.recording || _replaying) {
+      return;
+    }
+    if (_steps.length >= _maxRecordedSteps) {
+      if (!_stepsTruncated) {
+        _stepsTruncated = true;
+        notifyListeners();
+      }
       return;
     }
     _stepSequence += 1;

@@ -555,4 +555,62 @@ void main() {
       );
     });
   });
+
+  group('recorded step cap', () {
+    test('stops accepting new steps at maxRecordedSteps and marks the session '
+        'truncated', () {
+      final recorder = CockpitInteractionRecorder(
+        now: FakeClock().call,
+        maxRecordedSteps: 3,
+      );
+      recorder.start();
+
+      for (var i = 0; i < 5; i++) {
+        recorder.recordInteractionStep(incomingStep());
+      }
+
+      expect(recorder.steps, hasLength(3));
+      expect(recorder.stepsTruncated, isTrue);
+      expect(recorder.sessionSnapshot().stepCount, 3);
+      // The recorded prefix stays intact — no eviction of the head.
+      expect(recorder.steps.map((step) => step.stepId).toList(), <String>[
+        's1',
+        's2',
+        's3',
+      ]);
+    });
+
+    test('a truncated session replays its recorded prefix intact', () {
+      final recorder = CockpitInteractionRecorder(
+        now: FakeClock().call,
+        maxRecordedSteps: 2,
+      );
+      recorder.start();
+      recorder.recordInteractionStep(incomingStep());
+      recorder.recordInteractionStep(incomingStep());
+      recorder.recordInteractionStep(incomingStep());
+
+      expect(recorder.steps, hasLength(2));
+      expect(recorder.stepsTruncated, isTrue);
+      // The third step is dropped, not appended with a skipped id.
+      expect(recorder.steps.last.stepId, 's2');
+    });
+
+    test('the cap resets when a new session starts', () {
+      final recorder = CockpitInteractionRecorder(
+        now: FakeClock().call,
+        maxRecordedSteps: 1,
+      );
+      recorder.start();
+      recorder.recordInteractionStep(incomingStep());
+      recorder.recordInteractionStep(incomingStep());
+      expect(recorder.stepsTruncated, isTrue);
+
+      recorder.stop();
+      recorder.start();
+      expect(recorder.stepsTruncated, isFalse);
+      recorder.recordInteractionStep(incomingStep());
+      expect(recorder.steps, hasLength(1));
+    });
+  });
 }

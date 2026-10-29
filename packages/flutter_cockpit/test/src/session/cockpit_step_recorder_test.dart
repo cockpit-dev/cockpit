@@ -139,4 +139,79 @@ void main() {
       CockpitPlaneKind.nativeUiPlane,
     ]);
   });
+
+  group('retention cap', () {
+    test('evicts the oldest steps beyond maxRetainedSteps and keeps indexes '
+        'session-scoped', () {
+      final recorder = CockpitStepRecorder(
+        now: () => DateTime.utc(2026, 3, 30),
+        observationAssembler: const CockpitObservationAssembler(),
+        maxRetainedSteps: 3,
+      );
+
+      for (var i = 0; i < 5; i++) {
+        recorder.recordStep(
+          actionType: 'tap',
+          actionArgs: <String, Object?>{'n': i},
+        );
+      }
+
+      expect(recorder.steps, hasLength(3));
+      expect(recorder.droppedSteps, 2);
+      // Evicted records keep their original session-scoped index — the
+      // surviving tail reports indexes 2, 3, 4, not 0, 1, 2.
+      expect(recorder.steps.map((step) => step.index).toList(), <int>[2, 3, 4]);
+      expect(
+        recorder.steps.map((step) => step.actionArgs['n']).toList(),
+        <Object?>[2, 3, 4],
+      );
+    });
+
+    test('importStepRecords also drains through the cap', () {
+      final recorder = CockpitStepRecorder(
+        now: () => DateTime.utc(2026, 3, 30),
+        observationAssembler: const CockpitObservationAssembler(),
+        maxRetainedSteps: 2,
+      );
+
+      recorder.importStepRecords(<CockpitStepRecord>[
+        CockpitStepRecord(
+          index: 0,
+          actionType: 'tap',
+          actionArgs: const <String, Object?>{'n': 0},
+          observedAt: DateTime.utc(2026, 3, 30),
+        ),
+        CockpitStepRecord(
+          index: 1,
+          actionType: 'tap',
+          actionArgs: const <String, Object?>{'n': 1},
+          observedAt: DateTime.utc(2026, 3, 30),
+        ),
+        CockpitStepRecord(
+          index: 2,
+          actionType: 'tap',
+          actionArgs: const <String, Object?>{'n': 2},
+          observedAt: DateTime.utc(2026, 3, 30),
+        ),
+      ]);
+
+      expect(recorder.steps, hasLength(2));
+      expect(recorder.droppedSteps, 1);
+      expect(
+        recorder.steps.map((step) => step.actionArgs['n']).toList(),
+        <Object?>[1, 2],
+      );
+    });
+
+    test('rejects a non-positive retention bound', () {
+      expect(
+        () => CockpitStepRecorder(
+          now: () => DateTime.utc(2026, 3, 30),
+          observationAssembler: const CockpitObservationAssembler(),
+          maxRetainedSteps: 0,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

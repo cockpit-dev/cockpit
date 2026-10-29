@@ -22,15 +22,46 @@ final class CockpitStepRecorder {
   CockpitStepRecorder({
     required CockpitTimestampProvider now,
     required CockpitObservationAssembler observationAssembler,
+    int maxRetainedSteps = _defaultMaxRetainedSteps,
   }) : _now = now,
-       _observationAssembler = observationAssembler;
+       _observationAssembler = observationAssembler,
+       _maxRetainedSteps = maxRetainedSteps {
+    if (maxRetainedSteps < 1) {
+      throw ArgumentError.value(
+        maxRetainedSteps,
+        'maxRetainedSteps',
+        'must be at least 1',
+      );
+    }
+  }
+
+  static const int _defaultMaxRetainedSteps = 120;
 
   final CockpitTimestampProvider _now;
   final CockpitObservationAssembler _observationAssembler;
+  final int _maxRetainedSteps;
   final List<CockpitStepRecord> _steps = <CockpitStepRecord>[];
+
+  /// Number of steps evicted by the retention cap. Each evicted step shifts
+  /// the reported `index` forward so the surviving records keep their
+  /// original session-scoped ordering.
+  int _droppedSteps = 0;
+
+  /// Steps dropped by the retention cap since the recorder was created.
+  int get droppedSteps => _droppedSteps;
 
   List<CockpitStepRecord> get steps =>
       List<CockpitStepRecord>.unmodifiable(_steps);
+
+  int get _nextIndex => _droppedSteps + _steps.length;
+
+  void _appendStep(CockpitStepRecord step) {
+    _steps.add(step);
+    while (_steps.length > _maxRetainedSteps) {
+      _steps.removeAt(0);
+      _droppedSteps += 1;
+    }
+  }
 
   void recordStep({
     required String actionType,
@@ -55,9 +86,9 @@ final class CockpitStepRecorder {
     String? degradationReason,
     List<CockpitArtifactRef> captureRefs = const [],
   }) {
-    _steps.add(
+    _appendStep(
       CockpitStepRecord(
-        index: _steps.length,
+        index: _nextIndex,
         actionType: actionType,
         actionArgs: actionArgs,
         observedAt: _now().toUtc(),
@@ -91,7 +122,7 @@ final class CockpitStepRecorder {
     final snapshot = _observationAssembler.normalizeCommandSnapshot(
       command,
       result,
-      stepIndex: _steps.length,
+      stepIndex: _nextIndex,
     );
     final observation = _observationAssembler.observationFromCommandResult(
       result,
@@ -153,9 +184,9 @@ final class CockpitStepRecorder {
 
   void importStepRecords(Iterable<CockpitStepRecord> steps) {
     for (final step in steps) {
-      _steps.add(
+      _appendStep(
         CockpitStepRecord(
-          index: _steps.length,
+          index: _nextIndex,
           actionType: step.actionType,
           actionArgs: step.actionArgs,
           observedAt: step.observedAt,

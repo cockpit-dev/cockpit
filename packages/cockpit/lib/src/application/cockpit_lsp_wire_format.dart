@@ -3,6 +3,13 @@ import 'dart:convert';
 
 import 'package:stream_channel/stream_channel.dart';
 
+import '../worker/cockpit_worker_value_reader.dart';
+
+/// Upper bound on the accumulated header bytes while scanning for the
+/// `\r\n\r\n` terminator. A peer that never terminates the header would
+/// otherwise grow the buffer without limit.
+const int _lspHeaderMaximumBytes = 8192;
+
 StreamChannel<String> cockpitLspChannel(
   Stream<List<int>> stream,
   StreamSink<List<int>> sink,
@@ -39,18 +46,47 @@ final class _CockpitLspParser {
 
   void _handleByte(int byte) {
     _buffer.add(byte);
-    if (_readingHeader && _headerComplete) {
-      _contentLength = _parseContentLength();
-      _buffer.clear();
-      _readingHeader = false;
+    if (_readingHeader) {
+      if (_headerComplete) {
+        final contentLength = _parseContentLength();
+        if (contentLength == null) {
+          return;
+        }
+        if (contentLength < 0 ||
+            contentLength > cockpitWorkerMaximumPayloadBytes) {
+          _failFrame(
+            'LSP Content-Length $contentLength exceeds the worker maximum '
+            'of $cockpitWorkerMaximumPayloadBytes bytes.',
+          );
+          return;
+        }
+        _contentLength = contentLength;
+        _buffer.clear();
+        _readingHeader = false;
+        return;
+      }
+      if (_buffer.length > _lspHeaderMaximumBytes) {
+        _failFrame(
+          'LSP header exceeded $_lspHeaderMaximumBytes bytes without a '
+          'terminator.',
+        );
+        return;
+      }
       return;
     }
-    if (!_readingHeader && _buffer.length >= _contentLength) {
+    if (_buffer.length >= _contentLength) {
       _controller.add(utf8.decode(_buffer));
       _buffer.clear();
       _readingHeader = true;
       _contentLength = -1;
     }
+  }
+
+  void _failFrame(String message) {
+    _buffer.clear();
+    _contentLength = -1;
+    _controller.addError(FormatException(message));
+    _subscription.cancel();
   }
 
   bool get _headerComplete {
@@ -62,17 +98,29 @@ final class _CockpitLspParser {
         _buffer[length - 1] == 10;
   }
 
-  int _parseContentLength() {
-    final header = ascii.decode(_buffer);
+  int? _parseContentLength() {
+    String header;
+    try {
+      header = ascii.decode(_buffer);
+    } on FormatException {
+      _failFrame('LSP header is not valid ASCII.');
+      return null;
+    }
     final lines = header.split('\r\n');
     final lengthLine = lines.firstWhere(
       (line) => line.startsWith('Content-Length:'),
       orElse: () => '',
     );
     if (lengthLine.isEmpty) {
-      throw const FormatException('Missing Content-Length header.');
+      _failFrame('Missing Content-Length header.');
+      return null;
     }
-    return int.parse(lengthLine.split(':').last.trim());
+    try {
+      return int.parse(lengthLine.split(':').last.trim());
+    } on FormatException {
+      _failFrame('Unparseable Content-Length header.');
+      return null;
+    }
   }
 }
 

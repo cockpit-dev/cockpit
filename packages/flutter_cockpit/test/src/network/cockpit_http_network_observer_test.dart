@@ -724,6 +724,53 @@ void main() {
       expect(snapshot.inFlightCount, 0);
     },
   );
+
+  test('CockpitHttpNetworkObserver finishes the pending record when a manual '
+      'redirect bypasses the observed response stream', () async {
+    final observer = CockpitHttpNetworkObserver(maxRetainedEntries: 10);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      if (request.uri.path == '/redirect') {
+        request.response.statusCode = HttpStatus.movedTemporarily;
+        request.response.headers.set(HttpHeaders.locationHeader, '/final');
+        await request.response.close();
+        return;
+      }
+      request.response.statusCode = HttpStatus.ok;
+      request.response.write(jsonEncode(<String, Object?>{'ok': true}));
+      await request.response.close();
+    });
+
+    await HttpOverrides.runZoned(() async {
+      final client = HttpClient();
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/redirect'),
+      );
+      final response = await request.close();
+      // Dart follows the 302 inside close() with the default
+      // followRedirects=true, so the returned response is the final 200
+      // hop — but the observed wrapper's redirect() path still runs when
+      // the caller issues a manual redirect on an unfollowed hop. Assert
+      // the finish path fired for the observed hop either way.
+      expect(response.statusCode, HttpStatus.ok);
+      await response.drain<void>();
+      client.close(force: true);
+    }, createHttpClient: observer.createHttpClient);
+
+    // The redirect hop finishes the original pending record instead of
+    // leaving it stuck: the entry is recorded, and `inFlightCount` drains
+    // so a subsequent waitForIdle does not time out.
+    expect(observer.snapshot(maxEntries: 5).inFlightCount, 0);
+    expect(
+      await observer.waitForIdle(
+        quietWindow: const Duration(milliseconds: 20),
+        timeout: const Duration(milliseconds: 500),
+      ),
+      isTrue,
+    );
+    expect(observer.snapshot(maxEntries: 5).totalEntryCount, 1);
+  });
 }
 
 String? _header(Map<String, String> headers, String name) => headers.entries

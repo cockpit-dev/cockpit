@@ -58,6 +58,15 @@ import 'cockpit_visual_frame_driver.dart';
 const int _routeInformationImmediateDiscoveryRetries = 4;
 const Duration _routeInformationDiscoveryRetryDelay = Duration(seconds: 1);
 
+/// Total backoff budget for timer-based route-information discovery. After
+/// the immediate post-frame retries exhaust, the discovery reschedules on a
+/// one-second timer — but a host that genuinely has no
+/// `RouteInformationProvider` (a plain `MaterialApp`, or a headless embed)
+/// would reschedule forever. Cap the total retry window at this duration so
+/// the timer self-terminates instead of polling the tree every second for
+/// the app's lifetime.
+const Duration _routeInformationDiscoveryRetryBudget = Duration(seconds: 60);
+
 /// Handles one app-registered action invoked through the `appAction` command.
 ///
 /// The application decides what each named action does — applying a setting,
@@ -122,6 +131,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   bool _routeInformationDiscoveryScheduled = false;
   Timer? _routeInformationDiscoveryRetryTimer;
   int _routeInformationDiscoveryRetryCount = 0;
+  int _routeInformationDiscoveryRetryTimerTicks = 0;
   Object? _remoteSessionStartError;
   StackTrace? _remoteSessionStartErrorStackTrace;
   bool _reportedRemoteSessionStartFailure = false;
@@ -167,6 +177,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       _routeInformationDiscoveryRetryTimer?.cancel();
       _routeInformationDiscoveryRetryTimer = null;
       _routeInformationDiscoveryRetryCount = 0;
+      _routeInformationDiscoveryRetryTimerTicks = 0;
     }
     if (_routeInformationDiscoveryScheduled) {
       return;
@@ -197,6 +208,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         _routeInformationDiscoveryRetryTimer?.cancel();
         _routeInformationDiscoveryRetryTimer = null;
         _routeInformationDiscoveryRetryCount = 0;
+        _routeInformationDiscoveryRetryTimerTicks = 0;
         return;
       }
 
@@ -205,20 +217,28 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       // Descendant rebuilds do not invoke this State's lifecycle hooks, so a
       // single post-frame scan would miss the provider permanently. Retry a
       // few frames during startup for fast convergence, then back off while
-      // still allowing a later frame to complete the discovery. The timer
-      // only queues a post-frame callback; it never forces a new frame.
+      // still allowing a later frame to complete the discovery — but only
+      // within a bounded budget so a provider-less app does not reschedule
+      // the timer forever. The timer only queues a post-frame callback; it
+      // never forces a new frame.
       if (_routeInformationDiscoveryRetryCount <
           _routeInformationImmediateDiscoveryRetries) {
         _routeInformationDiscoveryRetryCount++;
         _scheduleRouteInformationDiscovery();
       } else if (_routeInformationDiscoveryRetryTimer == null && mounted) {
-        _routeInformationDiscoveryRetryTimer = Timer(
-          _routeInformationDiscoveryRetryDelay,
-          () {
-            _routeInformationDiscoveryRetryTimer = null;
-            _scheduleRouteInformationDiscovery();
-          },
-        );
+        final maxTimerTicks =
+            _routeInformationDiscoveryRetryBudget.inMicroseconds ~/
+            _routeInformationDiscoveryRetryDelay.inMicroseconds;
+        if (_routeInformationDiscoveryRetryTimerTicks < maxTimerTicks) {
+          _routeInformationDiscoveryRetryTimerTicks += 1;
+          _routeInformationDiscoveryRetryTimer = Timer(
+            _routeInformationDiscoveryRetryDelay,
+            () {
+              _routeInformationDiscoveryRetryTimer = null;
+              _scheduleRouteInformationDiscovery();
+            },
+          );
+        }
       }
     });
   }
