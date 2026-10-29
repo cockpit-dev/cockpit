@@ -511,14 +511,23 @@ CockpitLeafCommand cockpitDevMultiTouchCommand(
   name: 'multi',
   description: 'Run an explicit multi-pointer sequence on one Flutter target.',
   invocationSuffix: '[SELECTOR] [arguments]',
-  example: 'cockpit dev multi "Canvas" --sequence-file gesture.yaml',
+  example:
+      'cockpit dev multi "Canvas" --sequence-file gesture.yaml\n\n'
+      'Sequence schema (JSON/YAML/LON): {"steps":[{"pointer":0,'
+      '"phase":"down","atMs":0,"dx":100,"dy":200},{"pointer":0,'
+      '"phase":"up","atMs":80,"dx":100,"dy":200}]}. '
+      'Phases: down, move, up, cancel. dx/dy are the pointer position '
+      'in logical pixels for that step.',
   configure: (parser) {
     _targetOptions(parser);
     parser
       ..addOption('sequence', help: 'Sequence as LON, JSON, or YAML.')
       ..addOption(
         'sequence-file',
-        help: 'Read sequence from a LON/JSON/YAML file.',
+        help:
+            'Read sequence from a LON/JSON/YAML file. '
+            'Schema: steps[] each {pointer:int, phase:down|move|up|cancel, '
+            'atMs:int, dx:double, dy:double}.',
       )
       ..addOption('at', help: 'Optional origin as X,Y.');
   },

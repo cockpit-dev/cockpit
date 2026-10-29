@@ -489,6 +489,20 @@ final class CockpitDevRuntime {
       final queried = resolution.state;
       final queriedMap = queried is Map<Object?, Object?> ? queried : null;
       final status = queriedMap?['status'];
+      // A status the caller can act on needs the route the app is sitting on,
+      // not only bridge liveness. One minimal ui.inspect read is cheap and
+      // keeps `dev status` consistent with what `dev diagnose` already shows.
+      final ui = await invoke(session, 'ui.inspect', <String, Object?>{
+        'sessionId': session.sessionId,
+        'profile': 'minimal',
+        'snapshotOptions': const CockpitSnapshotOptions(
+          profile: CockpitSnapshotProfile.live,
+          maxTargets: 1,
+          maxAncestorsPerTarget: 0,
+        ).toJson(),
+      });
+      final uiOutput = _operationSucceeded(ui) ? ui.output : null;
+      final route = uiOutput?['routeName'];
       return writeEnvelope(
         action: 'status',
         session: session,
@@ -496,6 +510,8 @@ final class CockpitDevRuntime {
         state: <String, Object?>{
           'lifecycle': session.lifecycle,
           ..._sessionIdentity(session),
+          if (route is String && route.isNotEmpty)
+            'ui': <String, Object?>{'routeName': route},
           if (status is Map<Object?, Object?>)
             'connection': <String, Object?>{
               if (status['appReachable'] is bool) 'app': status['appReachable'],

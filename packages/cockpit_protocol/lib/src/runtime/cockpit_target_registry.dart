@@ -254,9 +254,17 @@ final class CockpitTargetRegistry {
       }
 
       if (candidate.index != null) {
-        final indexedMatch = _selectIndexedMatch(matches, candidate);
+        final indexedMatch = _selectIndexedMatch(
+          matches,
+          candidate,
+          requiredCommand: requiredCommand,
+        );
         if (indexedMatch == null) {
-          final orderedMatches = _orderedMatches(matches, candidate);
+          final orderedMatches = _orderedMatches(
+            matches,
+            candidate,
+            requiredCommand: requiredCommand,
+          );
           return CockpitTargetResolutionResult.failure(
             error: CockpitCommandError.targetNotFound(
               message:
@@ -285,8 +293,16 @@ final class CockpitTargetRegistry {
       }
 
       if (matches.length > 1) {
-        final orderedMatches = _orderedMatches(matches, candidate);
-        final preferredMatch = _selectPreferredMatch(matches, candidate);
+        final orderedMatches = _orderedMatches(
+          matches,
+          candidate,
+          requiredCommand: requiredCommand,
+        );
+        final preferredMatch = _selectPreferredMatch(
+          matches,
+          candidate,
+          requiredCommand: requiredCommand,
+        );
         if (preferredMatch != null) {
           return CockpitTargetResolutionResult.success(
             target: preferredMatch,
@@ -936,29 +952,48 @@ final class CockpitTargetRegistry {
 
   CockpitTarget? _selectPreferredMatch(
     List<CockpitTarget> matches,
-    CockpitLocator locator,
-  ) {
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     if (matches.length < 2) {
       return matches.isEmpty ? null : matches.single;
     }
 
     final sorted = matches.toList(growable: false)
       ..sort((left, right) {
-        final scoreCompare = _matchPriorityScore(
-          right,
-          locator,
-        ).compareTo(_matchPriorityScore(left, locator));
+        final scoreCompare =
+            _matchPriorityScore(
+              right,
+              locator,
+              requiredCommand: requiredCommand,
+            ).compareTo(
+              _matchPriorityScore(
+                left,
+                locator,
+                requiredCommand: requiredCommand,
+              ),
+            );
         if (scoreCompare != 0) {
           return scoreCompare;
         }
         return left.registrationId.compareTo(right.registrationId);
       });
 
-    final bestScore = _matchPriorityScore(sorted.first, locator);
+    final bestScore = _matchPriorityScore(
+      sorted.first,
+      locator,
+      requiredCommand: requiredCommand,
+    );
     final hasTie = sorted
         .skip(1)
         .any(
-          (candidate) => _matchPriorityScore(candidate, locator) == bestScore,
+          (candidate) =>
+              _matchPriorityScore(
+                candidate,
+                locator,
+                requiredCommand: requiredCommand,
+              ) ==
+              bestScore,
         );
     if (hasTie || bestScore <= 0) {
       return null;
@@ -968,8 +1003,9 @@ final class CockpitTargetRegistry {
 
   CockpitTarget? _selectIndexedMatch(
     List<CockpitTarget> matches,
-    CockpitLocator locator,
-  ) {
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     final index = locator.index;
     if (index == null) {
       return null;
@@ -977,7 +1013,11 @@ final class CockpitTargetRegistry {
     if (index < 0) {
       return null;
     }
-    final ordered = _orderedMatches(matches, locator);
+    final ordered = _orderedMatches(
+      matches,
+      locator,
+      requiredCommand: requiredCommand,
+    );
     if (index >= ordered.length) {
       return null;
     }
@@ -986,8 +1026,9 @@ final class CockpitTargetRegistry {
 
   List<CockpitTarget> _orderedMatches(
     List<CockpitTarget> matches,
-    CockpitLocator locator,
-  ) {
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     final ordered = matches.toList(growable: false)
       ..sort((left, right) {
         final geometryCompare = _compareGeometry(left, right);
@@ -995,10 +1036,18 @@ final class CockpitTargetRegistry {
           return geometryCompare;
         }
 
-        final scoreCompare = _matchPriorityScore(
-          right,
-          locator,
-        ).compareTo(_matchPriorityScore(left, locator));
+        final scoreCompare =
+            _matchPriorityScore(
+              right,
+              locator,
+              requiredCommand: requiredCommand,
+            ).compareTo(
+              _matchPriorityScore(
+                left,
+                locator,
+                requiredCommand: requiredCommand,
+              ),
+            );
         if (scoreCompare != 0) {
           return scoreCompare;
         }
@@ -1039,7 +1088,11 @@ final class CockpitTargetRegistry {
     return geometry.width * geometry.height;
   }
 
-  int _matchPriorityScore(CockpitTarget target, CockpitLocator locator) {
+  int _matchPriorityScore(
+    CockpitTarget target,
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     var score = 0;
     final textSignal = locator.signalMap[CockpitLocatorKind.text.name];
     if (textSignal != null) {
@@ -1086,6 +1139,14 @@ final class CockpitTargetRegistry {
       if (target.supportedCommands.contains(CockpitCommandType.longPress)) {
         score += 2;
       }
+    }
+    // A command-scoped lookup (for example `dev copy 'Task title'`) must land
+    // on a target that actually advertises that command. A label carrying the
+    // same text still outranks a passive copy of it when only the control can
+    // run the operation.
+    if (requiredCommand != null &&
+        target.supportedCommands.contains(requiredCommand)) {
+      score += 24;
     }
     if (target.keyValue != null && target.keyValue!.isNotEmpty) {
       score += 4;

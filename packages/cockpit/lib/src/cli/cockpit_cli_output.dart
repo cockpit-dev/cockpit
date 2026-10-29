@@ -1662,7 +1662,7 @@ Map<String, Object?> _compactDevInspect(
   final networkFailureCount = summary['networkFailureCount'];
   final diagnostics = state['diagnostics'];
   return <String, Object?>{
-    ..._pick(state, const <String>['routeName', 'truncated']),
+    ..._pick(state, const <String>['routeName', 'truncated', 'selectorHint']),
     ..._pick(summary, const <String>['visibleTargetCount']),
     if (runtimeErrorCount is int && (more || runtimeErrorCount > 0))
       'runtimeErrorCount': runtimeErrorCount,

@@ -2715,7 +2715,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   ) async {
     final resolution = command.locator == null
         ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
-        : await _resolveWithRetry(command);
+        : await _resolveWithRetry(
+            command,
+            requiredCommand: CockpitCommandType.copyText,
+          );
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -5573,9 +5576,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
   }
 
+  /// Whether the committed action produced an observable UI mutation.
+  ///
+  /// Returns `true` when the surface fingerprint or the interacted target's
+  /// interaction state moved, `false` when the action committed but left the
+  /// observable surface untouched, and `null` when there is no baseline to
+  /// compare against (the action never produced a before-fingerprint).
   bool? _changedSince(_ActionCommitResult commit) {
     final before = commit.beforeActionFingerprint;
-    if (before != null && _actionCommitFingerprint() != before) {
+    if (before == null) {
+      return null;
+    }
+    if (_actionCommitFingerprint() != before) {
       return true;
     }
     final target = commit.interactedTarget;
@@ -5589,7 +5601,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         return true;
       }
     }
-    return null;
+    return false;
   }
 
   CockpitTarget? _currentTargetFor(CockpitTarget previous) {

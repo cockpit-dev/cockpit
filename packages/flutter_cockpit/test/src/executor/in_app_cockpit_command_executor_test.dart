@@ -963,7 +963,9 @@ void main() {
 
     final repeated = await selectList('select-list-again');
     expect(repeated.success, isTrue, reason: repeated.error?.message);
-    expect(repeated.changed, isNull);
+    // Selecting the already-active segment commits without an observable
+    // mutation, so changed reports false rather than staying ambiguous.
+    expect(repeated.changed, isFalse);
     expect(selected, 1);
   });
 
@@ -7893,6 +7895,74 @@ void main() {
     expect(clipboardReads, 0);
     expect(erasedText, isEmpty);
     expect(controller.text, 'Cockpit edited');
+  });
+
+  testWidgets('copy resolves the editable field when a label shares its text', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    final controller = TextEditingController(text: 'from the field');
+    addTearDown(controller.dispose);
+    var clipboard = '';
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard =
+              (call.arguments as Map<Object?, Object?>)['text']! as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/editor',
+          registry: registry,
+          child: Scaffold(
+            body: Column(
+              children: <Widget>[
+                const Text('Task title'),
+                TextField(
+                  key: const ValueKey<String>('title-field'),
+                  controller: controller,
+                  decoration: const InputDecoration(labelText: 'Task title'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: tester
+          .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+          .snapshot,
+      postActionSettler: () async => tester.pump(),
+    );
+
+    final copied = await executor.execute(
+      CockpitCommand(
+        commandId: 'copy-title',
+        commandType: CockpitCommandType.copyText,
+        locator: const CockpitLocator(text: 'Task title'),
+      ),
+    );
+
+    expect(copied.success, isTrue, reason: '${copied.error}');
+    // The editable field's buffer wins over the passive label that carries
+    // the same text, so the clipboard gets the field's content rather than
+    // the label's own "Task title" string.
+    expect(clipboard, 'from the field');
   });
 
   testWidgets(

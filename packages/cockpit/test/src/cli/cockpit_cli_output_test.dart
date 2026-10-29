@@ -557,6 +557,35 @@ void main() {
     expect(value, isNot(contains('more')));
   });
 
+  test('dev inspect brief keeps selectorHint on a summarized miss', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.inspect',
+                data: const <String, Object?>{
+                  'action': 'inspect',
+                  'session': '6',
+                  'state': <String, Object?>{
+                    'routeName': '/editor',
+                    'truncated': false,
+                    'uiSummary': <String, Object?>{'visibleTargetCount': 18},
+                    'selectorHint':
+                        'Selector parsed but matched nothing. Check the ancestor types.',
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['route'], '/editor');
+    // A count:0 inspect that went through the summary path must still surface
+    // the selector hint, otherwise an AI caller reads a bare empty result with
+    // no clue that the selector itself was the problem.
+    expect(value['selectorHint'], isNotNull);
+  });
+
   test('dev status does not invent diagnostics that were not collected', () {
     const renderer = CockpitCliOutputRenderer();
 
@@ -582,6 +611,34 @@ void main() {
     expect(value, isNot(contains('state')));
     expect(value, isNot(contains('errors')));
     expect(value, isNot(contains('netFailures')));
+  });
+
+  test('dev status surfaces the route the app is sitting on', () {
+    const renderer = CockpitCliOutputRenderer();
+
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.status',
+                data: const <String, Object?>{
+                  'ok': true,
+                  'action': 'status',
+                  'session': '1',
+                  'state': <String, Object?>{
+                    'lifecycle': 'ready',
+                    'ui': <String, Object?>{'routeName': '/inbox'},
+                    'connection': <String, Object?>{
+                      'app': true,
+                      'bridge': true,
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['route'], '/inbox');
   });
 
   test('dev more status reports diagnostic zeroes when collected', () {

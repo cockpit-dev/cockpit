@@ -132,6 +132,11 @@ void main() {
       dev.subcommands['status']!.description,
       'Read the current Flutter development session state.',
     );
+    // `dev multi` drives an explicit pointer sequence whose schema used to be
+    // undiscoverable; the usage text must document the step fields so an AI
+    // caller can author a valid sequence file without reading source.
+    expect(dev.subcommands['multi']!.usage, contains('phase'));
+    expect(dev.subcommands['multi']!.usage, contains('atMs'));
     expect(
       dev.subcommands['start']!.argParser.options.keys,
       contains('session'),

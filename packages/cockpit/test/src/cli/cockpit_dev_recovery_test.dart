@@ -1369,48 +1369,61 @@ void main() {
     },
   );
 
-  test('status reuses the session query without diagnostic probes', () async {
-    final calls = <String>[];
-    final dev = CockpitDevRuntime(
-      runtime,
-      operationInvoker: (_, kind, _) async {
-        calls.add(kind);
-        expect(kind, 'session.development.get');
-        return _result(
-          kind,
-          output: const <String, Object?>{
-            'sessionId': 'session-old',
-            'targetId': 'target-1',
-            'appId': 'app-old',
-            'status': <String, Object?>{
-              'state': 'ready',
-              'appReachable': true,
-              'remoteSessionReachable': true,
-              'generation': 3,
-              'reloadOk': true,
-            },
-          },
-        );
-      },
-    );
-    runtime.configureOutput(
-      command: 'dev.status',
-      selection: const CockpitCliOutputSelection(
-        view: CockpitCliOutputView.full,
-      ),
-    );
+  test(
+    'status reuses the session query plus one minimal route probe',
+    () async {
+      final calls = <String>[];
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          calls.add(kind);
+          return switch (kind) {
+            'session.development.get' => _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                  'generation': 3,
+                  'reloadOk': true,
+                },
+              },
+            ),
+            'ui.inspect' => () {
+              expect(input['profile'], 'minimal');
+              return _result(
+                kind,
+                output: const <String, Object?>{'routeName': '/inbox'},
+              );
+            }(),
+            _ => throw StateError('Unexpected operation $kind'),
+          };
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.status',
+        selection: const CockpitCliOutputSelection(
+          view: CockpitCliOutputView.full,
+        ),
+      );
 
-    expect(await dev.status(session), cockpitSuccessExitCode);
-    expect(calls, <String>['session.development.get']);
-    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
-    final state = output['state']! as Map<Object?, Object?>;
-    expect(state['connection'], <String, Object?>{
-      'app': true,
-      'bridge': true,
-      'generation': 3,
-      'reloadOk': true,
-    });
-  });
+      expect(await dev.status(session), cockpitSuccessExitCode);
+      expect(calls, <String>['session.development.get', 'ui.inspect']);
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      final state = output['state']! as Map<Object?, Object?>;
+      expect(state['connection'], <String, Object?>{
+        'app': true,
+        'bridge': true,
+        'generation': 3,
+        'reloadOk': true,
+      });
+      expect(state['ui'], <String, Object?>{'route': '/inbox'});
+    },
+  );
 
   test(
     'diagnose uses compact UI summary and dedicated diagnostic reads',

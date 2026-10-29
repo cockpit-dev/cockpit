@@ -104,6 +104,10 @@ final class CockpitFlutterRunMachineClient {
       <String>[
         'run',
         '--machine',
+        // Skip the implicit `pub get` resolution; the worker already resolved
+        // dependencies when the project was prepared, and the extra pass only
+        // prints "Resolving dependencies..." noise onto the launcher output.
+        '--no-pub',
         '--target',
         target,
         '-d',

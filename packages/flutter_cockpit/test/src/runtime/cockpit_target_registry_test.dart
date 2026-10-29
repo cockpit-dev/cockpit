@@ -305,6 +305,81 @@ void main() {
     expect(candidates, isNot(contains('candidate-9')));
   });
 
+  test(
+    'required command outweighs the tap bonus when a label shadows a field',
+    () {
+      final registry = CockpitTargetRegistry(routeName: '/editor')
+        // The label is the Semantics-wrapped node the tap locator lands on,
+        // so it carries tap even though the user means the editable field
+        // when they run `dev copy 'Name'`. Its tap bonus must not beat the
+        // field's copyText capability.
+        ..register(
+          const CockpitTarget(
+            registrationId: 'title-label',
+            text: 'Name',
+            typeName: 'Semantics',
+            routeName: '/editor',
+            supportedCommands: <CockpitCommandType>{CockpitCommandType.tap},
+          ),
+        )
+        ..register(
+          const CockpitTarget(
+            registrationId: 'title-field',
+            text: 'Name',
+            typeName: 'TextField',
+            routeName: '/editor',
+            supportedCommands: <CockpitCommandType>{
+              CockpitCommandType.enterText,
+              CockpitCommandType.copyText,
+            },
+          ),
+        );
+
+      final copy = registry.resolve(
+        const CockpitLocator(text: 'Name'),
+        requiredCommand: CockpitCommandType.copyText,
+      );
+
+      expect(copy.isSuccess, isTrue, reason: '${copy.error}');
+      expect(copy.target?.registrationId, 'title-field');
+    },
+  );
+
+  test(
+    'a command-scoped resolve returns the capable target not a same-text tie',
+    () {
+      final registry = CockpitTargetRegistry(routeName: '/editor')
+        ..register(
+          const CockpitTarget(
+            registrationId: 'task-title-label',
+            text: 'Task title',
+            typeName: 'Text',
+            routeName: '/editor',
+          ),
+        )
+        ..register(
+          const CockpitTarget(
+            registrationId: 'task-title-field',
+            text: 'Task title',
+            typeName: 'TextField',
+            routeName: '/editor',
+            supportedCommands: <CockpitCommandType>{
+              CockpitCommandType.enterText,
+              CockpitCommandType.copyText,
+            },
+          ),
+        );
+
+      final copy = registry.resolve(
+        const CockpitLocator(text: 'Task title'),
+        requiredCommand: CockpitCommandType.copyText,
+      );
+
+      expect(copy.isSuccess, isTrue, reason: '${copy.error}');
+      expect(copy.target?.registrationId, 'task-title-field');
+    },
+  );
+
   test('resolves targets by native widget key', () {
     final registry = CockpitTargetRegistry(routeName: '/inbox');
 
