@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.14.1
+
+- Synchronized the protocol package with the Cockpit 4.14.1 release.
+
 ## 4.14.0
 
 - Added `CockpitInvalidSelector`, the structured error surfaces raise when a

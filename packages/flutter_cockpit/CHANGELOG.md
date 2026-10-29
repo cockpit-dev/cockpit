@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.14.1
+
+- `CockpitGestureEngine` fling actions now append a constant-velocity
+  release tail after the bulk path so the velocity tracker reports the
+  requested `--velocity` instead of a zero release flattened by viewport
+  clamping.
+- `InAppCockpitCommandExecutor` splits the recording probes: a new
+  `interactionRecorderActive` probe drives the tap `auto`→`gesture`
+  override (so driver taps emit real pointer events the interaction
+  recorder captures), while `isRecordingActive` keeps its pacing
+  semantics for native video recording.
+- Bare-text selectors now apply a per-command preference bonus so a
+  locator carrying `requiredCommand` picks the actionable target over a
+  passive same-label sibling, and `copy` resolves through
+  `requiredCommand: copyText` so the editable field wins.
+
 ## 4.14.0
 
 - Invalid selector syntax now throws `CockpitInvalidSelector` from surface

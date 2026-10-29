@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.14.1
+
+- `dev fling --velocity` is honored end to end: the gesture engine appends
+  a constant-velocity release tail so the reported release velocity matches
+  the requested value instead of being flattened to zero by viewport
+  clamping.
+- While the interaction recorder is active, `dev tap` resolves the default
+  `auto` activation through the gesture path so driver taps emit the real
+  pointer events the capture layer records; explicit `activation` values
+  still win.
+- `dev inspect` rows still advertise `tap: control|label`, selectors now
+  honor a per-command preference bonus so `requiredCommand`-bearing
+  locators pick the editable field over a same-label sibling, and `copy`
+  resolves through `requiredCommand: copyText` so the editable field wins.
+- `dev status` populates `ui.routeName` via a minimal `ui.inspect` pass,
+  and `changed`/`unchanged` step semantics now return an explicit
+  no-mutation verdict instead of a null.
+
 ## 4.14.0
 
 - `dev inspect` rows now advertise `tap: control|label` so AI callers can
