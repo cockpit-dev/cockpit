@@ -548,36 +548,20 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
       await _settleAtomicRevealFrame();
     }
-    if (duration == Duration.zero) {
-      // Zero-duration placements still run synchronously so callers that
-      // opted out of animation observe the final scroll offset on return.
-      await _applyRevealAdjustment(
-        revealTarget,
-        alignment: alignment,
-        padding: padding,
-        offset: offset,
-        duration: duration,
-      );
-      await _settleAtomicRevealFrame();
-    } else {
-      // Non-zero placements animate. The animation future is deliberately
-      // not awaited here: `animateTo` only progresses while the binding
-      // pumps frames, and blocking the reveal on it would deadlock test
-      // bindings and any runtime that awaits this call before scheduling
-      // its next frame. The surface instead settles the frame that shows
-      // the animation's first step and returns; the animation continues
-      // on the widget tree and callers revalidate geometry after the
-      // duration elapses.
-      final adjustment = _applyRevealAdjustment(
-        revealTarget,
-        alignment: alignment,
-        padding: padding,
-        offset: offset,
-        duration: duration,
-      );
-      await _settleAtomicRevealFrame();
-      unawaited(adjustment);
-    }
+    await _applyRevealAdjustment(
+      revealTarget,
+      alignment: alignment,
+      padding: padding,
+      offset: offset,
+      // The final placement stays atomic: `scrollUntilVisible` calls this
+      // from inside a scroll-search loop, and a detached `animateTo` keeps
+      // the position mid-flight while the next iteration's `jumpTo` or
+      // re-resolution runs, which breaks the loop's progress detection.
+      // The atomic jump is what keeps nested scrollables deterministic;
+      // visual continuity is a deliberate trade-off here.
+      duration: Duration.zero,
+    );
+    await _settleAtomicRevealFrame();
     return _locatorIsVisible(locator);
   }
 
