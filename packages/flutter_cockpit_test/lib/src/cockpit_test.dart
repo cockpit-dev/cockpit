@@ -126,6 +126,7 @@ void cockpitTestWidgets(
       await cockpit.debugger.close();
       cockpit.debug.restore();
       await cockpit.native.close();
+      await cockpit._pumpQueue.drain();
       await flutterTester.pumpWidget(const SizedBox.shrink());
       await flutterTester.pump();
       if (!ownsRuntime) {
@@ -237,7 +238,30 @@ final class _CockpitTestPumpQueue {
         .whenComplete(() {
           _active = false;
           scheduleMicrotask(_startNext);
+          _drainWaiters();
         });
+  }
+
+  final List<Completer<void>> _drainWaitersPending = <Completer<void>>[];
+
+  /// Waits until every queued pump has finished executing. Used by teardown so
+  /// a timed-out `watch` cannot leave an in-flight pump racing `pumpWidget`.
+  Future<void> drain() {
+    if (!_active && _pending.isEmpty) {
+      return Future<void>.value();
+    }
+    final completer = Completer<void>();
+    _drainWaitersPending.add(completer);
+    return completer.future;
+  }
+
+  void _drainWaiters() {
+    if (_active || _pending.isNotEmpty) return;
+    final waiters = List<Completer<void>>.of(_drainWaitersPending);
+    _drainWaitersPending.clear();
+    for (final waiter in waiters) {
+      waiter.complete();
+    }
   }
 }
 
